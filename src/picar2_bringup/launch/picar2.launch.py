@@ -56,6 +56,13 @@ def generate_launch_description():
         arguments=['ackermann_steering_controller', '--controller-manager-timeout', '30'],
     )
 
+    cmd_vel_relay = Node(
+        package='picar2_bringup',
+        executable='cmd_vel_relay.py',
+        name='cmd_vel_relay',
+        output='screen',
+    )
+
     return LaunchDescription([
         port_arg,
         baud_arg,
@@ -63,4 +70,5 @@ def generate_launch_description():
         robot_state_publisher,
         jsb_spawner,
         ackermann_spawner,
+        cmd_vel_relay,
     ])

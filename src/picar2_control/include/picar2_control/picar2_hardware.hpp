@@ -54,6 +54,10 @@ private:
   double pos_steer_left_{0.0};
   double pos_steer_right_{0.0};
 
+  // Front wheels — passive, no encoder; held at 0 for TF completeness
+  double pos_front_left_wheel_{0.0};
+  double pos_front_right_wheel_{0.0};
+
   // Commands — rear wheel velocity (rad/s), front steer position (rad)
   double cmd_vel_back_left_{0.0};
   double cmd_vel_back_right_{0.0};
