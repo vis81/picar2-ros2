@@ -39,6 +39,8 @@ public:
 private:
   void process_byte(uint8_t b, const rclcpp::Time & t);
   void dispatch_joint_frame(const uint8_t * payload, uint8_t len, const rclcpp::Time & t);
+  void send_timesync();
+  void dispatch_timesync_resp();
 
   std::string port_;
   int baud_{460800};
@@ -74,6 +76,12 @@ private:
 
   // Timestamp of last received JOINT frame (for velocity estimation)
   rclcpp::Time last_joint_time_{0, 0, RCL_ROS_TIME};
+
+  // Timesync
+  int64_t sync_t1_us_{0};
+  int64_t sync_last_t4_us_{0};
+  int     write_cycle_{0};
+  rclcpp::Time last_corrected_stamp_{0, 0, RCL_ROS_TIME};
 };
 
 }  // namespace picar2_control
