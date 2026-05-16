@@ -1,0 +1,27 @@
+controller_manager:
+  ros__parameters:
+    update_rate: 50  # Hz
+
+    joint_state_broadcaster:
+      type: joint_state_broadcaster/JointStateBroadcaster
+
+    ackermann_steering_controller:
+      type: ackermann_steering_controller/AckermannSteeringController
+
+ackermann_steering_controller:
+  ros__parameters:
+    # Joint names — must match the ros2_control block in the URDF
+    rear_wheels_names:  [back_left_joint, back_right_joint]
+    front_wheels_names: [front_left_steer_joint]   # single joint → bicycle model
+
+    # Robot geometry (metres) — rear track and wheelbase from URDF joint origins
+    wheelbase:          0.235    # 0.11922 + 0.11607
+    rear_wheel_track:   0.1685   # 2 × 0.08425
+    rear_wheels_radius: 0.033    # TODO: calibrate with measured travel distance
+    front_wheels_radius: 0.033
+
+    # Odometry from encoder feedback (we have real position state interfaces)
+    open_loop: false
+
+    # Stop motors if no cmd_vel received for 500 ms (matches firmware watchdog)
+    reference_timeout: 0.5
