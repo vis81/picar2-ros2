@@ -19,9 +19,11 @@ namespace picar2_control
 static constexpr uint8_t PROTO_START   = 0xAA;
 static constexpr uint8_t PROTO_MAX_LEN = 32;
 
-static constexpr uint8_t MSG_CMD_VEL  = 0x80;
-static constexpr uint8_t MSG_SET_RATE = 0x82;
-static constexpr uint8_t STREAM_JOINT = 0x01;
+static constexpr uint8_t MSG_CMD_VEL       = 0x80;
+static constexpr uint8_t MSG_SET_RATE      = 0x82;
+static constexpr uint8_t MSG_TIMESYNC      = 0x84;
+static constexpr uint8_t STREAM_JOINT      = 0x01;
+static constexpr uint8_t MSG_TIMESYNC_RESP = 0x05;
 
 static constexpr double DEG_TO_RAD    = M_PI / 180.0;
 static constexpr double RAD_TO_DEG    = 180.0 / M_PI;
@@ -69,10 +71,35 @@ static inline int32_t get_le32(const uint8_t * p)
     (static_cast<uint32_t>(p[3]) << 24));
 }
 
+static inline int64_t get_le64(const uint8_t * p)
+{
+  return static_cast<int64_t>(
+    static_cast<uint64_t>(get_le32(p)) | (static_cast<uint64_t>(get_le32(p + 4)) << 32));
+}
+
+static inline void put_le32(uint8_t * p, uint32_t v)
+{
+  p[0] = static_cast<uint8_t>(v);
+  p[1] = static_cast<uint8_t>(v >> 8);
+  p[2] = static_cast<uint8_t>(v >> 16);
+  p[3] = static_cast<uint8_t>(v >> 24);
+}
+
+static inline void put_le64(uint8_t * p, int64_t v)
+{
+  put_le32(p,     static_cast<uint32_t>(static_cast<uint64_t>(v) & 0xFFFFFFFFu));
+  put_le32(p + 4, static_cast<uint32_t>(static_cast<uint64_t>(v) >> 32));
+}
+
 static inline void put_le16(uint8_t * p, int16_t v)
 {
   p[0] = static_cast<uint8_t>(v);
   p[1] = static_cast<uint8_t>(v >> 8);
+}
+
+static int64_t time_now_us()
+{
+  return rclcpp::Clock(RCL_ROS_TIME).now().nanoseconds() / 1000LL;
 }
 
 // ── Serial helpers ────────────────────────────────────────────────────────────
@@ -149,6 +176,8 @@ hardware_interface::CallbackReturn Picar2Hardware::on_activate(
 
   decode_state_    = DecodeState::START;
   last_joint_time_ = rclcpp::Time(0, 0, RCL_ROS_TIME);
+  write_cycle_         = 0;
+  sync_last_t4_us_     = 0;
 
   RCLCPP_INFO(get_logger(), "Activated — JOINT stream at 50 Hz");
   return hardware_interface::CallbackReturn::SUCCESS;
@@ -221,6 +250,13 @@ void Picar2Hardware::dispatch_joint_frame(const uint8_t * p, uint8_t len, const 
     }
   }
 
+  if (len >= 22) {
+    int64_t pi_us = get_le64(&p[14]);
+    if (pi_us != 0) {
+      last_corrected_stamp_ = rclcpp::Time(pi_us * 1000LL, RCL_ROS_TIME);
+    }
+  }
+
   pos_back_left_   = new_left;
   pos_back_right_  = new_right;
   pos_steer_left_  = new_steer;
@@ -268,6 +304,8 @@ void Picar2Hardware::process_byte(uint8_t b, const rclcpp::Time & t)
       if (b == crc8(crc_input, 2 + rx_len_)) {
         if (rx_type_ == STREAM_JOINT && rx_len_ >= 10) {
           dispatch_joint_frame(rx_buf_, rx_len_, t);
+        } else if (rx_type_ == MSG_TIMESYNC_RESP && rx_len_ >= 8) {
+          dispatch_timesync_resp();
         }
       }
       decode_state_ = DecodeState::START;
@@ -325,7 +363,29 @@ hardware_interface::return_type Picar2Hardware::write(
   int n = encode_frame(MSG_CMD_VEL, payload, sizeof(payload), frame);
   ::write(fd_, frame, n);
 
+  if (write_cycle_ < 8 || write_cycle_ % 50 == 0) {
+    send_timesync();
+  }
+  write_cycle_++;
+
   return hardware_interface::return_type::OK;
+}
+
+void Picar2Hardware::send_timesync()
+{
+  sync_t1_us_ = time_now_us();
+  uint8_t payload[16];
+  put_le64(&payload[0], sync_t1_us_);
+  put_le64(&payload[8], sync_last_t4_us_);
+  uint8_t frame[24];
+  int n = encode_frame(MSG_TIMESYNC, payload, 16, frame);
+  ::write(fd_, frame, n);
+}
+
+void Picar2Hardware::dispatch_timesync_resp()
+{
+  sync_last_t4_us_ = time_now_us();
+  RCLCPP_DEBUG(get_logger(), "sync: T4 recorded");
 }
 
 }  // namespace picar2_control
