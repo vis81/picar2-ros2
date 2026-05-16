@@ -43,6 +43,14 @@
       </command_interface>
       <state_interface name="position"/>
     </joint>
+
+    <!-- Front wheels — passive (no encoder); position held at 0 for TF -->
+    <joint name="front_left_wheel_joint">
+      <state_interface name="position"/>
+    </joint>
+    <joint name="front_right_wheel_joint">
+      <state_interface name="position"/>
+    </joint>
   </ros2_control>
 
   <!-- ═══════════════════════════════════════════════════

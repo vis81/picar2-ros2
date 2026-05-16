@@ -182,6 +182,8 @@ std::vector<hardware_interface::StateInterface> Picar2Hardware::export_state_int
   interfaces.emplace_back("back_right_joint",        hardware_interface::HW_IF_VELOCITY, &vel_back_right_);
   interfaces.emplace_back("front_left_steer_joint",  hardware_interface::HW_IF_POSITION, &pos_steer_left_);
   interfaces.emplace_back("front_right_steer_joint", hardware_interface::HW_IF_POSITION, &pos_steer_right_);
+  interfaces.emplace_back("front_left_wheel_joint",  hardware_interface::HW_IF_POSITION, &pos_front_left_wheel_);
+  interfaces.emplace_back("front_right_wheel_joint", hardware_interface::HW_IF_POSITION, &pos_front_right_wheel_);
   return interfaces;
 }
 

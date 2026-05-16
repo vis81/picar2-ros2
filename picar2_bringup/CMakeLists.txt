@@ -7,4 +7,9 @@ install(DIRECTORY launch config
   DESTINATION share/${PROJECT_NAME}
 )
 
+install(PROGRAMS
+  picar2_bringup/cmd_vel_relay.py
+  DESTINATION lib/${PROJECT_NAME}
+)
+
 ament_package()
