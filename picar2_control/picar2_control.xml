@@ -1,0 +1,11 @@
+<library path="picar2_control">
+  <class name="picar2_control/Picar2Hardware"
+         type="picar2_control::Picar2Hardware"
+         base_class_type="hardware_interface::SystemInterface">
+    <description>
+      PICAR-2 ros2_control hardware interface.
+      Drives left/right DC motors and a steering servo via the Yahboom
+      STM32F103 over a custom binary serial protocol on /dev/ttyYahboom0.
+    </description>
+  </class>
+</library>
