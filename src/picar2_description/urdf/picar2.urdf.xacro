@@ -180,24 +180,6 @@
     </collision>
   </link>
 
-  <link name="camera_link">
-    <inertial>
-      <origin xyz="-0.0022507 -5.8908E-06 -0.021168" rpy="0 0 0"/>
-      <mass value="0.22414"/>
-      <inertia ixx="0.00039172" ixy="2.2482E-08"  ixz="4.3677E-08"
-               iyy="4.6625E-05" iyz="1.3858E-10"
-               izz="0.0004106"/>
-    </inertial>
-    <visual>
-      <origin xyz="0 0 0" rpy="0 0 0"/>
-      <geometry><mesh filename="package://picar2_description/meshes/camera_link.STL"/></geometry>
-      <material name=""><color rgba="0.082353 0.082353 0.082353 1"/></material>
-    </visual>
-    <collision>
-      <origin xyz="0 0 0" rpy="0 0 0"/>
-      <geometry><mesh filename="package://picar2_description/meshes/camera_link.STL"/></geometry>
-    </collision>
-  </link>
 
   <link name="laser_link">
     <inertial>
@@ -279,11 +261,6 @@
   </joint>
 
   <!-- Sensors (fixed) -->
-  <joint name="camera_joint" type="fixed">
-    <origin xyz="0.095117 0 0.09955" rpy="0 0.0057171 0"/>
-    <parent link="base_link"/>
-    <child  link="camera_link"/>
-  </joint>
 
   <joint name="laser_joint" type="fixed">
     <origin xyz="0.012548 0 0.1311" rpy="0 0 3.1416"/>
