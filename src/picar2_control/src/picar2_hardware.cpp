@@ -48,19 +48,21 @@ hardware_interface::CallbackReturn Picar2Hardware::on_deactivate(
 std::vector<hardware_interface::StateInterface> Picar2Hardware::export_state_interfaces()
 {
   std::vector<hardware_interface::StateInterface> interfaces;
-  interfaces.emplace_back("wheel_left",  hardware_interface::HW_IF_POSITION, &pos_left_);
-  interfaces.emplace_back("wheel_left",  hardware_interface::HW_IF_VELOCITY, &vel_left_);
-  interfaces.emplace_back("wheel_right", hardware_interface::HW_IF_POSITION, &pos_right_);
-  interfaces.emplace_back("wheel_right", hardware_interface::HW_IF_VELOCITY, &vel_right_);
+  interfaces.emplace_back("back_left_joint",        hardware_interface::HW_IF_POSITION, &pos_back_left_);
+  interfaces.emplace_back("back_left_joint",        hardware_interface::HW_IF_VELOCITY, &vel_back_left_);
+  interfaces.emplace_back("back_right_joint",       hardware_interface::HW_IF_POSITION, &pos_back_right_);
+  interfaces.emplace_back("back_right_joint",       hardware_interface::HW_IF_VELOCITY, &vel_back_right_);
+  interfaces.emplace_back("front_left_steer_joint", hardware_interface::HW_IF_POSITION, &pos_steer_left_);
+  interfaces.emplace_back("front_right_steer_joint",hardware_interface::HW_IF_POSITION, &pos_steer_right_);
   return interfaces;
 }
 
 std::vector<hardware_interface::CommandInterface> Picar2Hardware::export_command_interfaces()
 {
   std::vector<hardware_interface::CommandInterface> interfaces;
-  interfaces.emplace_back("wheel_left",  hardware_interface::HW_IF_VELOCITY, &cmd_vel_left_);
-  interfaces.emplace_back("wheel_right", hardware_interface::HW_IF_VELOCITY, &cmd_vel_right_);
-  interfaces.emplace_back("steering",    hardware_interface::HW_IF_POSITION, &cmd_steering_);
+  interfaces.emplace_back("back_left_joint",        hardware_interface::HW_IF_VELOCITY, &cmd_vel_back_left_);
+  interfaces.emplace_back("back_right_joint",       hardware_interface::HW_IF_VELOCITY, &cmd_vel_back_right_);
+  interfaces.emplace_back("front_left_steer_joint", hardware_interface::HW_IF_POSITION, &cmd_steer_);
   return interfaces;
 }
 

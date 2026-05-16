@@ -40,16 +40,20 @@ private:
   int baud_{460800};
   int fd_{-1};
 
-  // State: encoder ticks from STM32
-  double pos_left_{0.0};
-  double pos_right_{0.0};
-  double vel_left_{0.0};
-  double vel_right_{0.0};
+  // State — rear drive wheels (encoder ticks → rad, rad/s)
+  double pos_back_left_{0.0};
+  double pos_back_right_{0.0};
+  double vel_back_left_{0.0};
+  double vel_back_right_{0.0};
 
-  // Command: wheel velocity mm/s, steering 0–100
-  double cmd_vel_left_{0.0};
-  double cmd_vel_right_{0.0};
-  double cmd_steering_{50.0};
+  // State — front steer (rad); right mirrors left
+  double pos_steer_left_{0.0};
+  double pos_steer_right_{0.0};
+
+  // Command — rear wheel velocity (rad/s), front steer position (rad)
+  double cmd_vel_back_left_{0.0};
+  double cmd_vel_back_right_{0.0};
+  double cmd_steer_{0.0};
 };
 
 }  // namespace picar2_control
