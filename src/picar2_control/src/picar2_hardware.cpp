@@ -188,9 +188,10 @@ std::vector<hardware_interface::StateInterface> Picar2Hardware::export_state_int
 std::vector<hardware_interface::CommandInterface> Picar2Hardware::export_command_interfaces()
 {
   std::vector<hardware_interface::CommandInterface> interfaces;
-  interfaces.emplace_back("back_left_joint",        hardware_interface::HW_IF_VELOCITY, &cmd_vel_back_left_);
-  interfaces.emplace_back("back_right_joint",       hardware_interface::HW_IF_VELOCITY, &cmd_vel_back_right_);
-  interfaces.emplace_back("front_left_steer_joint", hardware_interface::HW_IF_POSITION, &cmd_steer_);
+  interfaces.emplace_back("back_left_joint",         hardware_interface::HW_IF_VELOCITY, &cmd_vel_back_left_);
+  interfaces.emplace_back("back_right_joint",        hardware_interface::HW_IF_VELOCITY, &cmd_vel_back_right_);
+  interfaces.emplace_back("front_left_steer_joint",  hardware_interface::HW_IF_POSITION, &cmd_steer_left_);
+  interfaces.emplace_back("front_right_steer_joint", hardware_interface::HW_IF_POSITION, &cmd_steer_right_);
   return interfaces;
 }
 
@@ -303,9 +304,12 @@ hardware_interface::return_type Picar2Hardware::write(
   };
 
   uint8_t payload[5];
+  // Average Ackermann inner/outer angles — our servo applies one physical angle
+  double cmd_steer = (cmd_steer_left_ + cmd_steer_right_) * 0.5;
+
   put_le16(&payload[0], to_dps(cmd_vel_back_left_));
   put_le16(&payload[2], to_dps(cmd_vel_back_right_));
-  payload[4] = to_steer(cmd_steer_);
+  payload[4] = to_steer(cmd_steer);
 
   uint8_t frame[16];
   int n = encode_frame(MSG_CMD_VEL, payload, sizeof(payload), frame);
