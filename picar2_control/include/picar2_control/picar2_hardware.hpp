@@ -57,7 +57,8 @@ private:
   // Commands — rear wheel velocity (rad/s), front steer position (rad)
   double cmd_vel_back_left_{0.0};
   double cmd_vel_back_right_{0.0};
-  double cmd_steer_{0.0};
+  double cmd_steer_left_{0.0};
+  double cmd_steer_right_{0.0};
 
   // Frame decoder state machine
   enum class DecodeState : uint8_t { START, TYPE, LEN, PAYLOAD, CRC };
