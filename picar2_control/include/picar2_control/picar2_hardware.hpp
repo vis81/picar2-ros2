@@ -38,7 +38,7 @@ public:
 
 private:
   void process_byte(uint8_t b, const rclcpp::Time & t);
-  void dispatch_joint_frame(const uint8_t * payload, const rclcpp::Time & t);
+  void dispatch_joint_frame(const uint8_t * payload, uint8_t len, const rclcpp::Time & t);
 
   std::string port_;
   int baud_{460800};

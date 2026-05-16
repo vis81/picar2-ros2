@@ -54,6 +54,12 @@ static int encode_frame(uint8_t type, const uint8_t * payload, uint8_t len, uint
 }
 
 // ── Little-endian helpers ─────────────────────────────────────────────────────
+static inline int16_t get_le16(const uint8_t * p)
+{
+  return static_cast<int16_t>(
+    static_cast<uint16_t>(p[0]) | (static_cast<uint16_t>(p[1]) << 8));
+}
+
 static inline int32_t get_le32(const uint8_t * p)
 {
   return static_cast<int32_t>(
@@ -198,14 +204,16 @@ std::vector<hardware_interface::CommandInterface> Picar2Hardware::export_command
 }
 
 // ── Frame decoder ─────────────────────────────────────────────────────────────
-void Picar2Hardware::dispatch_joint_frame(const uint8_t * p, const rclcpp::Time & t)
+void Picar2Hardware::dispatch_joint_frame(const uint8_t * p, uint8_t len, const rclcpp::Time & t)
 {
   double new_left  = get_le32(&p[0]) * DEG_TO_RAD;
   double new_right = get_le32(&p[4]) * DEG_TO_RAD;
-  // Steer: 0-100 (50 = center) → rad
   double new_steer = (static_cast<int>(p[8]) - 50) / 50.0 * STEER_MAX_RAD;
 
-  if (last_joint_time_.nanoseconds() > 0) {
+  if (len >= 14) {
+    vel_back_left_  = get_le16(&p[10]) * DEG_TO_RAD;
+    vel_back_right_ = get_le16(&p[12]) * DEG_TO_RAD;
+  } else if (last_joint_time_.nanoseconds() > 0) {
     double dt = (t - last_joint_time_).seconds();
     if (dt > 1e-3 && dt < 1.0) {
       vel_back_left_  = (new_left  - pos_back_left_)  / dt;
@@ -259,7 +267,7 @@ void Picar2Hardware::process_byte(uint8_t b, const rclcpp::Time & t)
 
       if (b == crc8(crc_input, 2 + rx_len_)) {
         if (rx_type_ == STREAM_JOINT && rx_len_ >= 10) {
-          dispatch_joint_frame(rx_buf_, t);
+          dispatch_joint_frame(rx_buf_, rx_len_, t);
         }
       }
       decode_state_ = DecodeState::START;
