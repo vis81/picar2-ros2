@@ -237,7 +237,7 @@ void Picar2Hardware::dispatch_joint_frame(const uint8_t * p, uint8_t len, const 
 {
   double new_left  = get_le32(&p[0]) * DEG_TO_RAD;
   double new_right = get_le32(&p[4]) * DEG_TO_RAD;
-  double new_steer = (static_cast<int>(p[8]) - 50) / 50.0 * STEER_MAX_RAD;
+  double new_steer = (50 - static_cast<int>(p[8])) / 50.0 * STEER_MAX_RAD;
 
   if (len >= 14) {
     vel_back_left_  = get_le16(&p[10]) * DEG_TO_RAD;
@@ -345,9 +345,10 @@ hardware_interface::return_type Picar2Hardware::write(
       std::clamp(dps, static_cast<double>(INT16_MIN), static_cast<double>(INT16_MAX)));
   };
 
-  // rad → 0-100 (50 = center, ±0.6 rad = ±50)
+  // rad → 0-100 (50 = center). Servo convention: 0 = full left, 100 = full right,
+  // so positive rad (left) maps to val < 50.
   auto to_steer = [](double rad) -> uint8_t {
-    double val = std::round(rad / STEER_MAX_RAD * 50.0 + 50.0);
+    double val = std::round(50.0 - rad / STEER_MAX_RAD * 50.0);
     return static_cast<uint8_t>(std::clamp(val, 0.0, 100.0));
   };
 
