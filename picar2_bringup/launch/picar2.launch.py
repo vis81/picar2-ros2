@@ -63,6 +63,13 @@ def generate_launch_description():
         output='screen',
     )
 
+    ekf_node = Node(
+        package='robot_localization',
+        executable='ekf_node',
+        parameters=[str(bringup_share / 'config' / 'ekf.yaml')],
+        remappings=[('/odometry/filtered', '/odom')],
+    )
+
     imu_filter = Node(
         package='imu_filter_madgwick',
         executable='imu_filter_madgwick_node',
@@ -86,4 +93,5 @@ def generate_launch_description():
         ackermann_spawner,
         cmd_vel_relay,
         imu_filter,
+        ekf_node,
     ])
