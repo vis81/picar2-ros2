@@ -1,11 +1,15 @@
 #include "picar2_control/picar2_hardware.hpp"
 
 #include <fcntl.h>
+#include <sys/select.h>
+#include <sys/time.h>
 #include <termios.h>
+#include <time.h>
 #include <unistd.h>
 
 #include <algorithm>
 #include <cerrno>
+#include <chrono>
 #include <cmath>
 #include <cstring>
 
@@ -16,20 +20,20 @@ namespace picar2_control
 {
 
 // ── Protocol constants ────────────────────────────────────────────────────────
-static constexpr uint8_t PROTO_START   = 0xAA;
-static constexpr uint8_t PROTO_MAX_LEN = 32;
+static constexpr uint8_t PROTO_START       = 0xAA;
+static constexpr uint8_t PROTO_MAX_LEN     = 32;
 
 static constexpr uint8_t MSG_CMD_VEL       = 0x80;
-static constexpr uint8_t MSG_SET_RATE      = 0x82;
+static constexpr uint8_t MSG_REQ           = 0x81;
 static constexpr uint8_t MSG_TIMESYNC      = 0x84;
 static constexpr uint8_t STREAM_JOINT      = 0x01;
 static constexpr uint8_t MSG_TIMESYNC_RESP = 0x05;
 
 static constexpr double DEG_TO_RAD    = M_PI / 180.0;
 static constexpr double RAD_TO_DEG    = 180.0 / M_PI;
-static constexpr double STEER_MAX_RAD = 0.6;  // URDF steer limit
+static constexpr double STEER_MAX_RAD = 0.6;
 
-// ── CRC-8 (poly 0x31, Dallas/Maxim) — matches firmware protocol.c ────────────
+// ── CRC-8 (poly 0x31, Dallas/Maxim) ──────────────────────────────────────────
 static uint8_t crc8(const uint8_t * buf, size_t len)
 {
   uint8_t crc = 0;
@@ -42,15 +46,13 @@ static uint8_t crc8(const uint8_t * buf, size_t len)
   return crc;
 }
 
-// ── Frame encoder — matches firmware proto_encode() ───────────────────────────
+// ── Frame encoder ─────────────────────────────────────────────────────────────
 static int encode_frame(uint8_t type, const uint8_t * payload, uint8_t len, uint8_t * out)
 {
   out[0] = PROTO_START;
   out[1] = type;
   out[2] = len;
-  if (len > 0) {
-    std::memcpy(&out[3], payload, len);
-  }
+  if (len > 0) std::memcpy(&out[3], payload, len);
   out[3 + len] = crc8(&out[1], 2 + len);
   return 4 + len;
 }
@@ -65,16 +67,17 @@ static inline int16_t get_le16(const uint8_t * p)
 static inline int32_t get_le32(const uint8_t * p)
 {
   return static_cast<int32_t>(
-    static_cast<uint32_t>(p[0]) |
-    (static_cast<uint32_t>(p[1]) << 8) |
-    (static_cast<uint32_t>(p[2]) << 16) |
-    (static_cast<uint32_t>(p[3]) << 24));
+    static_cast<uint32_t>(p[0]) | (static_cast<uint32_t>(p[1]) << 8) |
+    (static_cast<uint32_t>(p[2]) << 16) | (static_cast<uint32_t>(p[3]) << 24));
 }
 
 static inline int64_t get_le64(const uint8_t * p)
 {
-  return static_cast<int64_t>(
-    static_cast<uint64_t>(get_le32(p)) | (static_cast<uint64_t>(get_le32(p + 4)) << 32));
+  uint64_t lo = static_cast<uint32_t>(p[0]) | (static_cast<uint32_t>(p[1]) << 8) |
+                (static_cast<uint32_t>(p[2]) << 16) | (static_cast<uint32_t>(p[3]) << 24);
+  uint64_t hi = static_cast<uint32_t>(p[4]) | (static_cast<uint32_t>(p[5]) << 8) |
+                (static_cast<uint32_t>(p[6]) << 16) | (static_cast<uint32_t>(p[7]) << 24);
+  return static_cast<int64_t>(lo | (hi << 32));
 }
 
 static inline void put_le32(uint8_t * p, uint32_t v)
@@ -97,9 +100,13 @@ static inline void put_le16(uint8_t * p, int16_t v)
   p[1] = static_cast<uint8_t>(v >> 8);
 }
 
-static int64_t time_now_us()
+// ── CLOCK_MONOTONIC µs ────────────────────────────────────────────────────────
+static inline int64_t now_us()
 {
-  return rclcpp::Clock(RCL_ROS_TIME).now().nanoseconds() / 1000LL;
+  struct timespec ts;
+  clock_gettime(CLOCK_MONOTONIC, &ts);
+  return static_cast<int64_t>(ts.tv_sec) * 1000000LL +
+         static_cast<int64_t>(ts.tv_nsec) / 1000LL;
 }
 
 // ── Serial helpers ────────────────────────────────────────────────────────────
@@ -132,7 +139,7 @@ hardware_interface::CallbackReturn Picar2Hardware::on_init(
   return hardware_interface::CallbackReturn::SUCCESS;
 }
 
-// ── on_configure — open and configure serial port ────────────────────────────
+// ── on_configure — open and configure serial port ─────────────────────────────
 hardware_interface::CallbackReturn Picar2Hardware::on_configure(
   const rclcpp_lifecycle::State & /*previous_state*/)
 {
@@ -164,41 +171,41 @@ hardware_interface::CallbackReturn Picar2Hardware::on_configure(
   return hardware_interface::CallbackReturn::SUCCESS;
 }
 
-// ── on_activate — start JOINT stream, reset decoder ──────────────────────────
+// ── on_activate — start reader thread ────────────────────────────────────────
 hardware_interface::CallbackReturn Picar2Hardware::on_activate(
   const rclcpp_lifecycle::State & /*previous_state*/)
 {
-  // Request JOINT stream at 50 Hz
-  uint8_t payload[3] = {STREAM_JOINT, 50, 0};
-  uint8_t frame[16];
-  int n = encode_frame(MSG_SET_RATE, payload, sizeof(payload), frame);
-  ::write(fd_, frame, n);
+  decode_state_ = DecodeState::START;
 
-  decode_state_    = DecodeState::START;
-  last_joint_time_ = rclcpp::Time(0, 0, RCL_ROS_TIME);
-  write_cycle_         = 0;
-  sync_last_t4_us_     = 0;
+  {
+    std::lock_guard<std::mutex> lk(state_mutex_);
+    joint_ready_     = false;
+    stg_pi_time_us_  = 0;
+    stg_t3_us_       = 0;
+    sync_last_t4_us_ = 0;
+  }
 
-  RCLCPP_INFO(get_logger(), "Activated — JOINT stream at 50 Hz");
+  reader_running_.store(true);
+  reader_thread_   = std::thread(&Picar2Hardware::reader_loop,   this);
+  timesync_thread_ = std::thread(&Picar2Hardware::timesync_loop, this);
+
+  RCLCPP_INFO(get_logger(), "Activated — reader + timesync threads started");
   return hardware_interface::CallbackReturn::SUCCESS;
 }
 
-// ── on_deactivate — stop stream, zero outputs, close port ────────────────────
+// ── on_deactivate — stop reader thread, close port ───────────────────────────
 hardware_interface::CallbackReturn Picar2Hardware::on_deactivate(
   const rclcpp_lifecycle::State & /*previous_state*/)
 {
-  uint8_t frame[16];
-  int n;
-
-  // Stop JOINT stream (hz = 0)
-  uint8_t stop_payload[3] = {STREAM_JOINT, 0, 0};
-  n = encode_frame(MSG_SET_RATE, stop_payload, sizeof(stop_payload), frame);
-  ::write(fd_, frame, n);
+  reader_running_.store(false);
+  joint_cv_.notify_all();
+  if (reader_thread_.joinable())   reader_thread_.join();
+  if (timesync_thread_.joinable()) timesync_thread_.join();
 
   // Zero velocity, neutral steer
   uint8_t vel_payload[5] = {0, 0, 0, 0, 50};
-  n = encode_frame(MSG_CMD_VEL, vel_payload, sizeof(vel_payload), frame);
-  ::write(fd_, frame, n);
+  uint8_t frame[16];
+  uart_write(frame, encode_frame(MSG_CMD_VEL, vel_payload, sizeof(vel_payload), frame));
 
   ::close(fd_);
   fd_ = -1;
@@ -232,45 +239,102 @@ std::vector<hardware_interface::CommandInterface> Picar2Hardware::export_command
   return interfaces;
 }
 
-// ── Frame decoder ─────────────────────────────────────────────────────────────
-void Picar2Hardware::dispatch_joint_frame(const uint8_t * p, uint8_t len, const rclcpp::Time & t)
+// ── UART write — mutex-guarded so reader_loop/timesync_loop/main don't race ───
+void Picar2Hardware::uart_write(const uint8_t * buf, int len)
 {
-  double new_left  = get_le32(&p[0]) * DEG_TO_RAD;
-  double new_right = get_le32(&p[4]) * DEG_TO_RAD;
-  double new_steer = (50 - static_cast<int>(p[8])) / 50.0 * STEER_MAX_RAD;
-
-  if (len >= 14) {
-    vel_back_left_  = get_le16(&p[10]) * DEG_TO_RAD;
-    vel_back_right_ = get_le16(&p[12]) * DEG_TO_RAD;
-  } else if (last_joint_time_.nanoseconds() > 0) {
-    double dt = (t - last_joint_time_).seconds();
-    if (dt > 1e-3 && dt < 1.0) {
-      vel_back_left_  = (new_left  - pos_back_left_)  / dt;
-      vel_back_right_ = (new_right - pos_back_right_) / dt;
+  std::lock_guard<std::mutex> lk(write_mutex_);
+  int sent = 0;
+  while (sent < len) {
+    ssize_t n = ::write(fd_, buf + sent, len - sent);
+    if (n > 0) {
+      sent += n;
+    } else if (errno != EAGAIN && errno != EINTR) {
+      RCLCPP_ERROR(get_logger(), "uart_write: %s", std::strerror(errno));
+      break;
     }
   }
-
-  if (len >= 22) {
-    int64_t pi_us = get_le64(&p[14]);
-    if (pi_us != 0) {
-      last_corrected_stamp_ = rclcpp::Time(pi_us * 1000LL, RCL_ROS_TIME);
-    }
-  }
-
-  pos_back_left_   = new_left;
-  pos_back_right_  = new_right;
-  pos_steer_left_  = new_steer;
-  pos_steer_right_ = new_steer;
-  last_joint_time_ = t;
 }
 
-void Picar2Hardware::process_byte(uint8_t b, const rclcpp::Time & t)
+// ── Reader thread — continuous UART drain ─────────────────────────────────────
+void Picar2Hardware::reader_loop()
+{
+  while (reader_running_.load(std::memory_order_relaxed)) {
+    fd_set rset;
+    FD_ZERO(&rset);
+    FD_SET(fd_, &rset);
+    struct timeval tv{0, 10000};  // 10 ms wake interval
+    if (select(fd_ + 1, &rset, nullptr, nullptr, &tv) <= 0) continue;
+
+    uint8_t buf[64];
+    ssize_t n = ::read(fd_, buf, sizeof(buf));
+    for (ssize_t i = 0; i < n; i++) {
+      process_byte(buf[i]);
+    }
+  }
+}
+
+// ── Timesync thread — periodic MSG_TIMESYNC, independent of read() ───────────
+void Picar2Hardware::timesync_loop()
+{
+  while (reader_running_.load(std::memory_order_relaxed)) {
+    int64_t t4_prev;
+    {
+      std::lock_guard<std::mutex> lk(state_mutex_);
+      t4_prev = sync_last_t4_us_;
+    }
+
+    int64_t t1 = now_us();
+    uint8_t payload[16];
+    put_le64(&payload[0], t1);
+    put_le64(&payload[8], t4_prev);
+    uint8_t frame[24];
+    uart_write(frame, encode_frame(MSG_TIMESYNC, payload, 16, frame));
+
+    // Sleep 1 s in 10 ms steps so we respond to shutdown quickly
+    for (int i = 0; i < 100 && reader_running_.load(std::memory_order_relaxed); i++) {
+      std::this_thread::sleep_for(std::chrono::milliseconds(10));
+    }
+  }
+}
+
+// ── Frame decoder ─────────────────────────────────────────────────────────────
+void Picar2Hardware::dispatch_joint_frame(const uint8_t * p, uint8_t len)
+{
+  int64_t t3 = now_us();
+
+  double pos_left  = get_le32(&p[0]) * DEG_TO_RAD;
+  double pos_right = get_le32(&p[4]) * DEG_TO_RAD;
+  double steer     = (50 - static_cast<int>(p[8])) / 50.0 * STEER_MAX_RAD;
+  double vel_left  = get_le16(&p[10]) * DEG_TO_RAD;
+  double vel_right = get_le16(&p[12]) * DEG_TO_RAD;
+  int64_t pi_us    = (len >= 22) ? get_le64(&p[14]) : 0LL;
+
+  {
+    std::lock_guard<std::mutex> lk(state_mutex_);
+    stg_pos_left_   = pos_left;
+    stg_pos_right_  = pos_right;
+    stg_vel_left_   = vel_left;
+    stg_vel_right_  = vel_right;
+    stg_steer_      = steer;
+    stg_pi_time_us_ = pi_us;
+    stg_t3_us_      = t3;
+    joint_ready_    = true;
+  }
+  joint_cv_.notify_one();
+}
+
+void Picar2Hardware::dispatch_timesync_resp()
+{
+  int64_t t4 = now_us();
+  std::lock_guard<std::mutex> lk(state_mutex_);
+  sync_last_t4_us_ = t4;
+}
+
+void Picar2Hardware::process_byte(uint8_t b)
 {
   switch (decode_state_) {
     case DecodeState::START:
-      if (b == PROTO_START) {
-        decode_state_ = DecodeState::TYPE;
-      }
+      if (b == PROTO_START) decode_state_ = DecodeState::TYPE;
       break;
 
     case DecodeState::TYPE:
@@ -279,10 +343,7 @@ void Picar2Hardware::process_byte(uint8_t b, const rclcpp::Time & t)
       break;
 
     case DecodeState::LEN:
-      if (b > PROTO_MAX_LEN) {
-        decode_state_ = DecodeState::START;
-        break;
-      }
+      if (b > PROTO_MAX_LEN) { decode_state_ = DecodeState::START; break; }
       rx_len_       = b;
       rx_pos_       = 0;
       decode_state_ = (b > 0) ? DecodeState::PAYLOAD : DecodeState::CRC;
@@ -290,9 +351,7 @@ void Picar2Hardware::process_byte(uint8_t b, const rclcpp::Time & t)
 
     case DecodeState::PAYLOAD:
       rx_buf_[rx_pos_++] = b;
-      if (rx_pos_ == rx_len_) {
-        decode_state_ = DecodeState::CRC;
-      }
+      if (rx_pos_ == rx_len_) decode_state_ = DecodeState::CRC;
       break;
 
     case DecodeState::CRC: {
@@ -303,7 +362,7 @@ void Picar2Hardware::process_byte(uint8_t b, const rclcpp::Time & t)
 
       if (b == crc8(crc_input, 2 + rx_len_)) {
         if (rx_type_ == STREAM_JOINT && rx_len_ >= 10) {
-          dispatch_joint_frame(rx_buf_, rx_len_, t);
+          dispatch_joint_frame(rx_buf_, rx_len_);
         } else if (rx_type_ == MSG_TIMESYNC_RESP && rx_len_ >= 8) {
           dispatch_timesync_resp();
         }
@@ -314,79 +373,81 @@ void Picar2Hardware::process_byte(uint8_t b, const rclcpp::Time & t)
   }
 }
 
-// ── read — drain serial, parse frames ────────────────────────────────────────
+// ── read — send timesync + request, wait for joint frame ─────────────────────
 hardware_interface::return_type Picar2Hardware::read(
-  const rclcpp::Time & time, const rclcpp::Duration & /*period*/)
+  const rclcpp::Time & /*time*/, const rclcpp::Duration & /*period*/)
 {
-  if (fd_ < 0) {
+  if (fd_ < 0) return hardware_interface::return_type::OK;
+
+  // Arm flag before sending request (timesync runs independently in timesync_loop)
+  {
+    std::lock_guard<std::mutex> lk(state_mutex_);
+    joint_ready_ = false;
+  }
+
+  // Send MSG_REQ for JOINT
+  uint8_t req_payload[1] = {STREAM_JOINT};
+  uint8_t req_frame[8];
+  uart_write(req_frame, encode_frame(MSG_REQ, req_payload, 1, req_frame));
+
+  // Wait for reader thread to deliver the JOINT frame
+  std::unique_lock<std::mutex> lk(state_mutex_);
+  bool got = joint_cv_.wait_for(lk, std::chrono::milliseconds(5),
+                                 [this] { return joint_ready_; });
+  if (!got) {
+    lk.unlock();
+    RCLCPP_WARN_THROTTLE(get_logger(), *get_clock(), 1000, "no JOINT response within 5ms");
     return hardware_interface::return_type::OK;
   }
 
-  uint8_t buf[256];
-  ssize_t n = ::read(fd_, buf, sizeof(buf));
-  for (ssize_t i = 0; i < n; i++) {
-    process_byte(buf[i], time);
+  pos_back_left_  = stg_pos_left_;
+  pos_back_right_ = stg_pos_right_;
+  vel_back_left_  = stg_vel_left_;
+  vel_back_right_ = stg_vel_right_;
+  pos_steer_left_  = stg_steer_;
+  pos_steer_right_ = stg_steer_;
+  int64_t pi_us   = stg_pi_time_us_;
+  int64_t t3      = stg_t3_us_;
+  joint_ready_    = false;
+  lk.unlock();
+
+  if (pi_us != 0) {
+    double lag_ms = (t3 - pi_us) * 1e-3;
+    RCLCPP_INFO_SKIPFIRST_THROTTLE(get_logger(), *get_clock(), 5000,
+      "sensor lag: %.2f ms", lag_ms);
   }
+
   return hardware_interface::return_type::OK;
 }
 
-// ── write — encode and send CMD_VEL every cycle (feeds watchdog) ──────────────
+// ── write — send CMD_VEL every cycle ─────────────────────────────────────────
 hardware_interface::return_type Picar2Hardware::write(
   const rclcpp::Time & /*time*/, const rclcpp::Duration & /*period*/)
 {
-  if (fd_ < 0) {
-    return hardware_interface::return_type::OK;
-  }
+  if (fd_ < 0) return hardware_interface::return_type::OK;
 
-  // rad/s → deg/s, clamped to int16
   auto to_dps = [](double rads) -> int16_t {
     double dps = rads * RAD_TO_DEG;
     return static_cast<int16_t>(
       std::clamp(dps, static_cast<double>(INT16_MIN), static_cast<double>(INT16_MAX)));
   };
 
-  // rad → 0-100 (50 = center). Servo convention: 0 = full left, 100 = full right,
-  // so positive rad (left) maps to val < 50.
   auto to_steer = [](double rad) -> uint8_t {
     double val = std::round(50.0 - rad / STEER_MAX_RAD * 50.0);
     return static_cast<uint8_t>(std::clamp(val, 0.0, 100.0));
   };
 
-  uint8_t payload[5];
-  // Average Ackermann inner/outer angles — our servo applies one physical angle
   double cmd_steer = (cmd_steer_left_ + cmd_steer_right_) * 0.5;
 
+  uint8_t payload[5];
   put_le16(&payload[0], to_dps(cmd_vel_back_left_));
   put_le16(&payload[2], to_dps(cmd_vel_back_right_));
   payload[4] = to_steer(cmd_steer);
 
   uint8_t frame[16];
-  int n = encode_frame(MSG_CMD_VEL, payload, sizeof(payload), frame);
-  ::write(fd_, frame, n);
-
-  if (write_cycle_ < 8 || write_cycle_ % 50 == 0) {
-    send_timesync();
-  }
-  write_cycle_++;
+  uart_write(frame, encode_frame(MSG_CMD_VEL, payload, sizeof(payload), frame));
 
   return hardware_interface::return_type::OK;
-}
-
-void Picar2Hardware::send_timesync()
-{
-  sync_t1_us_ = time_now_us();
-  uint8_t payload[16];
-  put_le64(&payload[0], sync_t1_us_);
-  put_le64(&payload[8], sync_last_t4_us_);
-  uint8_t frame[24];
-  int n = encode_frame(MSG_TIMESYNC, payload, 16, frame);
-  ::write(fd_, frame, n);
-}
-
-void Picar2Hardware::dispatch_timesync_resp()
-{
-  sync_last_t4_us_ = time_now_us();
-  RCLCPP_DEBUG(get_logger(), "sync: T4 recorded");
 }
 
 }  // namespace picar2_control
