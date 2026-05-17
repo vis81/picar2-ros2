@@ -26,5 +26,6 @@ ackermann_steering_controller:
     # Stop motors if no cmd_vel received for 500 ms (matches firmware watchdog)
     reference_timeout: 0.5
 
-    # Let robot_localization own the odom→base_link TF
+    # Let robot_localization own the odom→base_footprint TF
     enable_odom_tf: false
+    base_frame_id: base_footprint
