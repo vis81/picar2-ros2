@@ -12,6 +12,8 @@
 #include "hardware_interface/types/hardware_interface_return_values.hpp"
 #include "rclcpp/rclcpp.hpp"
 #include "rclcpp_lifecycle/state.hpp"
+#include "sensor_msgs/msg/imu.hpp"
+#include "sensor_msgs/msg/magnetic_field.hpp"
 
 namespace picar2_control
 {
@@ -46,11 +48,13 @@ private:
   void uart_write(const uint8_t * buf, int len);
   void process_byte(uint8_t b);
   void dispatch_joint_frame(const uint8_t * payload, uint8_t len);
+  void dispatch_imu_frame(const uint8_t * payload, uint8_t len);
   void dispatch_timesync_resp();
 
   std::string port_;
   int baud_{460800};
   int fd_{-1};
+  int imu_rate_hz_{50};
 
   // Joint state — exported via state interfaces; written by read() (main thread only)
   double pos_back_left_{0.0};
@@ -98,6 +102,11 @@ private:
 
   // Timesync — sync_last_t4_us_ written by reader thread, read by read()
   int64_t sync_last_t4_us_{0};
+
+  // IMU publisher node (dedicated, so we can publish from reader thread)
+  rclcpp::Node::SharedPtr imu_node_;
+  rclcpp::Publisher<sensor_msgs::msg::Imu>::SharedPtr          imu_pub_;
+  rclcpp::Publisher<sensor_msgs::msg::MagneticField>::SharedPtr mag_pub_;
 };
 
 }  // namespace picar2_control

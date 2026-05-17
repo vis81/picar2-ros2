@@ -25,8 +25,10 @@ static constexpr uint8_t PROTO_MAX_LEN     = 32;
 
 static constexpr uint8_t MSG_CMD_VEL       = 0x80;
 static constexpr uint8_t MSG_REQ           = 0x81;
+static constexpr uint8_t MSG_SET_RATE      = 0x82;
 static constexpr uint8_t MSG_TIMESYNC      = 0x84;
 static constexpr uint8_t STREAM_JOINT      = 0x01;
+static constexpr uint8_t STREAM_IMU        = 0x02;
 static constexpr uint8_t MSG_TIMESYNC_RESP = 0x05;
 
 static constexpr double DEG_TO_RAD    = M_PI / 180.0;
@@ -135,6 +137,8 @@ hardware_interface::CallbackReturn Picar2Hardware::on_init(
     ? info_.hardware_parameters.at("port") : "/dev/ttyYahboom0";
   baud_ = info_.hardware_parameters.count("baud")
     ? std::stoi(info_.hardware_parameters.at("baud")) : 460800;
+  imu_rate_hz_ = info_.hardware_parameters.count("imu_rate_hz")
+    ? std::stoi(info_.hardware_parameters.at("imu_rate_hz")) : 50;
 
   return hardware_interface::CallbackReturn::SUCCESS;
 }
@@ -168,6 +172,11 @@ hardware_interface::CallbackReturn Picar2Hardware::on_configure(
   tcflush(fd_, TCIOFLUSH);
 
   RCLCPP_INFO(get_logger(), "Opened %s at %d baud", port_.c_str(), baud_);
+
+  imu_node_ = rclcpp::Node::make_shared("picar2_imu");
+  imu_pub_  = imu_node_->create_publisher<sensor_msgs::msg::Imu>("/imu/data_raw", 10);
+  mag_pub_  = imu_node_->create_publisher<sensor_msgs::msg::MagneticField>("/imu/mag", 10);
+
   return hardware_interface::CallbackReturn::SUCCESS;
 }
 
@@ -189,7 +198,14 @@ hardware_interface::CallbackReturn Picar2Hardware::on_activate(
   reader_thread_   = std::thread(&Picar2Hardware::reader_loop,   this);
   timesync_thread_ = std::thread(&Picar2Hardware::timesync_loop, this);
 
-  RCLCPP_INFO(get_logger(), "Activated — reader + timesync threads started");
+  // Start IMU stream
+  auto hz = static_cast<uint16_t>(imu_rate_hz_);
+  uint8_t rate_payload[3] = {STREAM_IMU,
+    static_cast<uint8_t>(hz & 0xFF), static_cast<uint8_t>(hz >> 8)};
+  uint8_t rate_frame[10];
+  uart_write(rate_frame, encode_frame(MSG_SET_RATE, rate_payload, 3, rate_frame));
+
+  RCLCPP_INFO(get_logger(), "Activated — IMU streaming at %d Hz", imu_rate_hz_);
   return hardware_interface::CallbackReturn::SUCCESS;
 }
 
@@ -201,6 +217,11 @@ hardware_interface::CallbackReturn Picar2Hardware::on_deactivate(
   joint_cv_.notify_all();
   if (reader_thread_.joinable())   reader_thread_.join();
   if (timesync_thread_.joinable()) timesync_thread_.join();
+
+  // Stop IMU stream
+  uint8_t stop_payload[3] = {STREAM_IMU, 0, 0};
+  uint8_t stop_frame[10];
+  uart_write(stop_frame, encode_frame(MSG_SET_RATE, stop_payload, 3, stop_frame));
 
   // Zero velocity, neutral steer
   uint8_t vel_payload[5] = {0, 0, 0, 0, 50};
@@ -330,6 +351,44 @@ void Picar2Hardware::dispatch_timesync_resp()
   sync_last_t4_us_ = t4;
 }
 
+void Picar2Hardware::dispatch_imu_frame(const uint8_t * p, uint8_t len)
+{
+  if (len < 12) return;  // need at least accel (6B) + gyro (6B)
+
+  auto stamp = imu_node_->get_clock()->now();
+
+  // accel: int16 × 0.001 m/s²
+  // gyro:  int16 × 0.001 rad/s
+  sensor_msgs::msg::Imu imu_msg;
+  imu_msg.header.stamp    = stamp;
+  imu_msg.header.frame_id = "imu_link";
+
+  imu_msg.linear_acceleration.x = get_le16(&p[0]) * 0.001;
+  imu_msg.linear_acceleration.y = get_le16(&p[2]) * 0.001;
+  imu_msg.linear_acceleration.z = get_le16(&p[4]) * 0.001;
+
+  imu_msg.angular_velocity.x = get_le16(&p[6]) * 0.001;
+  imu_msg.angular_velocity.y = get_le16(&p[8]) * 0.001;
+  imu_msg.angular_velocity.z = get_le16(&p[10]) * 0.001;
+
+  // Orientation not estimated — signal with -1 in first covariance element
+  imu_msg.orientation_covariance[0] = -1.0;
+
+  imu_pub_->publish(imu_msg);
+
+  if (len < 18) return;  // need magn (6B)
+
+  // magn: int16 × 0.1 µT → convert to T (1 µT = 1e-6 T)
+  sensor_msgs::msg::MagneticField mag_msg;
+  mag_msg.header.stamp    = stamp;
+  mag_msg.header.frame_id = "imu_link";
+  mag_msg.magnetic_field.x = get_le16(&p[12]) * 1e-7;
+  mag_msg.magnetic_field.y = get_le16(&p[14]) * 1e-7;
+  mag_msg.magnetic_field.z = get_le16(&p[16]) * 1e-7;
+
+  mag_pub_->publish(mag_msg);
+}
+
 void Picar2Hardware::process_byte(uint8_t b)
 {
   switch (decode_state_) {
@@ -363,6 +422,8 @@ void Picar2Hardware::process_byte(uint8_t b)
       if (b == crc8(crc_input, 2 + rx_len_)) {
         if (rx_type_ == STREAM_JOINT && rx_len_ >= 10) {
           dispatch_joint_frame(rx_buf_, rx_len_);
+        } else if (rx_type_ == STREAM_IMU && rx_len_ >= 12) {
+          dispatch_imu_frame(rx_buf_, rx_len_);
         } else if (rx_type_ == MSG_TIMESYNC_RESP && rx_len_ >= 8) {
           dispatch_timesync_resp();
         }
