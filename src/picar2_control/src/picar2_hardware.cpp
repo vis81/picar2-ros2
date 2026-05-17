@@ -467,6 +467,11 @@ hardware_interface::return_type Picar2Hardware::read(
   vel_back_right_ = stg_vel_right_;
   pos_steer_left_  = stg_steer_;
   pos_steer_right_ = stg_steer_;
+  // Front wheels are passive — estimate rotation from rear average for visualization
+  // Left wheel joint axis is mirrored in URDF, so negate its position
+  double avg_rear = (pos_back_left_ + pos_back_right_) * 0.5;
+  pos_front_left_wheel_  = -avg_rear;
+  pos_front_right_wheel_ =  avg_rear;
   int64_t pi_us   = stg_pi_time_us_;
   int64_t t3      = stg_t3_us_;
   joint_ready_    = false;
