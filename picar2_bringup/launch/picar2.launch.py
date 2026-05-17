@@ -63,6 +63,20 @@ def generate_launch_description():
         output='screen',
     )
 
+    imu_filter = Node(
+        package='imu_filter_madgwick',
+        executable='imu_filter_madgwick_node',
+        parameters=[{
+            'use_mag': True,
+            'publish_tf': False,
+            'world_frame': 'enu',
+        }],
+        remappings=[
+            ('/imu/data_raw', '/imu/data_raw'),
+            ('/imu/mag',      '/imu/mag'),
+        ],
+    )
+
     return LaunchDescription([
         port_arg,
         baud_arg,
@@ -71,4 +85,5 @@ def generate_launch_description():
         jsb_spawner,
         ackermann_spawner,
         cmd_vel_relay,
+        imu_filter,
     ])
