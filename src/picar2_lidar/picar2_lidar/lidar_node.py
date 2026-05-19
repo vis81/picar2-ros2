@@ -20,6 +20,7 @@ target_rpm  : float Desired motor RPM (default 300.0)
 kp          : float PI proportional gain (default 0.454)
 ki          : float PI integral gain (default 0.050)
 ff_duty     : float Feed-forward PWM duty cycle % (default 67.7)
+angle_offset: float Extra scan rotation in radians added on top of gap-based auto-calibration (default 0.0)
 pwm_pin     : int   BCM GPIO pin for motor PWM (default 18)
 stby_pin    : int   BCM GPIO pin for motor STBY (default 23)
 """
@@ -43,6 +44,7 @@ _INDEX_LAST       = 0xF9
 _INDICES_PER_REV  = _INDEX_LAST - _INDEX_FIRST + 1   # 90
 _READINGS_PER_PKT = 4
 _READINGS_PER_REV = _INDICES_PER_REV * _READINGS_PER_PKT  # 360
+DEG_PER_INDEX     = 360.0 / _INDICES_PER_REV              # 4.0
 
 _RPM_MIN = 50.0
 _RPM_MAX = 600.0
@@ -74,11 +76,12 @@ class LidarNode(Node):
         self.declare_parameter('range_min',  0.06)
         self.declare_parameter('range_max',  5.0)
         self.declare_parameter('target_rpm', 300.0)
-        self.declare_parameter('kp',         0.454)
-        self.declare_parameter('ki',         0.050)
-        self.declare_parameter('ff_duty',    67.7)
-        self.declare_parameter('pwm_pin',    18)
-        self.declare_parameter('stby_pin',   23)
+        self.declare_parameter('kp',           0.454)
+        self.declare_parameter('ki',           0.050)
+        self.declare_parameter('ff_duty',      67.7)
+        self.declare_parameter('angle_offset', 0.0)
+        self.declare_parameter('pwm_pin',      18)
+        self.declare_parameter('stby_pin',     23)
 
         port       = self.get_parameter('port').value
         baud       = self.get_parameter('baud').value
@@ -86,11 +89,12 @@ class LidarNode(Node):
         self._range_min  = self.get_parameter('range_min').value
         self._range_max  = self.get_parameter('range_max').value
         self._target_rpm = self.get_parameter('target_rpm').value
-        self._kp         = self.get_parameter('kp').value
-        self._ki         = self.get_parameter('ki').value
-        self._ff_duty    = self.get_parameter('ff_duty').value
-        pwm_pin          = self.get_parameter('pwm_pin').value
-        stby_pin         = self.get_parameter('stby_pin').value
+        self._kp           = self.get_parameter('kp').value
+        self._ki           = self.get_parameter('ki').value
+        self._ff_duty      = self.get_parameter('ff_duty').value
+        self._base_offset  = 0.0   # auto-updated from blind-spot gap each revolution
+        pwm_pin            = self.get_parameter('pwm_pin').value
+        stby_pin           = self.get_parameter('stby_pin').value
 
         self._scan_pub = self.create_publisher(LaserScan, 'scan', 10)
         self._rpm_pub  = self.create_publisher(Float32,   'scan/rpm', 10)
@@ -127,10 +131,34 @@ class LidarNode(Node):
     # ── Scan accumulator ──────────────────────────────────────────────────────
 
     def _reset_scan(self):
-        self._ranges      = [float('inf')] * _READINGS_PER_REV
-        self._intensities = [0.0]          * _READINGS_PER_REV
-        self._scan_stamp  = None
-        self._scan_start_mono = None
+        self._ranges           = [float('inf')] * _READINGS_PER_REV
+        self._intensities      = [0.0]          * _READINGS_PER_REV
+        self._scan_stamp       = None
+        self._scan_start_mono  = None
+        self._received_indices = set()
+
+    # ── Blind-spot gap detection ──────────────────────────────────────────────
+
+    def _find_gap_start(self, received: set):
+        """Return start index (0..89) of the 3-index blind-spot gap, or None."""
+        n_missing = _INDICES_PER_REV - len(received)
+        if not (3 <= n_missing <= 8):   # 3 expected; allow small noise margin
+            return None
+        for start in range(_INDICES_PER_REV):
+            if all((start + j) % _INDICES_PER_REV not in received for j in range(3)):
+                if (start - 1) % _INDICES_PER_REV in received:
+                    return start
+        return None
+
+    def _update_base_offset(self):
+        """Recompute _base_offset so the blind-spot gap lands at π (behind robot)."""
+        gap = self._find_gap_start(self._received_indices)
+        if gap is None:
+            return
+        # Gap spans 3 indices × 4 readings = 12°; centre is 6° past gap start
+        gap_center_deg = gap * DEG_PER_INDEX + 6.0
+        self._base_offset = math.pi - math.radians(gap_center_deg)
+        self.get_logger().debug(f'blind-spot gap at index {gap}  ({gap_center_deg:.1f}°)  base_offset={math.degrees(self._base_offset):.1f}°')
 
     # ── PI motor control ──────────────────────────────────────────────────────
 
@@ -180,8 +208,9 @@ class LidarNode(Node):
         msg = LaserScan()
         msg.header.stamp    = self._scan_stamp
         msg.header.frame_id = self._frame_id
-        msg.angle_min       = 0.0
-        msg.angle_max       = 2.0 * math.pi - inc
+        offset = self._base_offset + self.get_parameter('angle_offset').value
+        msg.angle_min       = offset
+        msg.angle_max       = offset + 2.0 * math.pi - inc
         msg.angle_increment = inc
         msg.time_increment  = scan_time / _READINGS_PER_REV if scan_time > 0.0 else 0.0
         msg.scan_time       = float(scan_time)
@@ -208,11 +237,11 @@ class LidarNode(Node):
                     continue
 
                 pkt = bytes(buf[:_PACKET_BYTES])
-                buf = buf[_PACKET_BYTES:]
-
                 result = self._parse_packet(pkt)
                 if result is None:
+                    buf.pop(0)   # false 0xFA in payload — retry from next byte
                     continue
+                buf = buf[_PACKET_BYTES:]
 
                 rpm, index, readings = result
 
@@ -229,9 +258,10 @@ class LidarNode(Node):
                     now_msg   = self.get_clock().now().to_msg()
                     now_mono  = time.monotonic()
                     if self._scan_stamp is not None:
+                        self._update_base_offset()   # use gap from completed revolution
                         scan_time = now_mono - self._scan_start_mono
                         self._publish_scan(scan_time)
-                    self._reset_scan()
+                    self._reset_scan()               # also clears _received_indices
                     self._scan_stamp      = now_msg
                     self._scan_start_mono = now_mono
 
@@ -239,6 +269,7 @@ class LidarNode(Node):
                     continue   # wait for first index=0 before filling
 
                 # Fill accumulator (4 readings per packet)
+                self._received_indices.add(index)
                 base = index * _READINGS_PER_PKT
                 for i, (dist_m, signal) in enumerate(readings):
                     self._ranges[base + i]      = dist_m
