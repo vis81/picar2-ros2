@@ -6,10 +6,8 @@ from launch_ros.actions import Node
 
 def generate_launch_description():
     return LaunchDescription([
-        DeclareLaunchArgument('port',         default_value='/dev/serial0'),
-        DeclareLaunchArgument('target_rpm',   default_value='300.0'),
-        DeclareLaunchArgument('frame_id',     default_value='laser_link'),
-        DeclareLaunchArgument('angle_offset', default_value='0.0'),
+        DeclareLaunchArgument('port',     default_value='/dev/serial0'),
+        DeclareLaunchArgument('frame_id', default_value='laser_link'),
 
         Node(
             package='picar2_lidar',
@@ -18,9 +16,9 @@ def generate_launch_description():
             output='screen',
             parameters=[{
                 'port':         LaunchConfiguration('port'),
-                'target_rpm':   LaunchConfiguration('target_rpm'),
                 'frame_id':     LaunchConfiguration('frame_id'),
-                'angle_offset': LaunchConfiguration('angle_offset'),
+                'target_rpm':   300.0,
+                'angle_offset': -2.8,
             }],
         ),
     ])

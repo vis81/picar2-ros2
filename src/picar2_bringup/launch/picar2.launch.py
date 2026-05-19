@@ -93,6 +93,10 @@ def generate_launch_description():
         name='lidar_node',
         output='screen',
         condition=IfCondition(LaunchConfiguration('lidar')),
+        parameters=[{
+            'target_rpm':   300.0,
+            'angle_offset': -2.8,
+        }],
     )
 
     return LaunchDescription([
