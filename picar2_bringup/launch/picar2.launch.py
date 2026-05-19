@@ -3,6 +3,7 @@ from pathlib import Path
 from ament_index_python.packages import get_package_share_directory
 from launch import LaunchDescription
 from launch.actions import DeclareLaunchArgument
+from launch.conditions import IfCondition
 from launch.substitutions import Command, LaunchConfiguration
 from launch_ros.actions import Node
 from launch_ros.parameter_descriptions import ParameterValue
@@ -12,8 +13,10 @@ def generate_launch_description():
     desc_share    = Path(get_package_share_directory('picar2_description'))
     bringup_share = Path(get_package_share_directory('picar2_bringup'))
 
-    port_arg = DeclareLaunchArgument('port', default_value='/dev/ttyYahboom0')
-    baud_arg = DeclareLaunchArgument('baud', default_value='460800')
+    port_arg  = DeclareLaunchArgument('port',  default_value='/dev/ttyYahboom0')
+    baud_arg  = DeclareLaunchArgument('baud',  default_value='460800')
+    lidar_arg = DeclareLaunchArgument('lidar', default_value='true',
+                                      description='Launch the LiDAR node')
 
     robot_description = ParameterValue(
         Command([
@@ -84,9 +87,18 @@ def generate_launch_description():
         ],
     )
 
+    lidar_node = Node(
+        package='picar2_lidar',
+        executable='lidar_node',
+        name='lidar_node',
+        output='screen',
+        condition=IfCondition(LaunchConfiguration('lidar')),
+    )
+
     return LaunchDescription([
         port_arg,
         baud_arg,
+        lidar_arg,
         ros2_control_node,
         robot_state_publisher,
         jsb_spawner,
@@ -94,4 +106,5 @@ def generate_launch_description():
         cmd_vel_relay,
         imu_filter,
         ekf_node,
+        lidar_node,
     ])
