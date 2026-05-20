@@ -499,7 +499,7 @@ hardware_interface::return_type Picar2Hardware::write(
   };
 
   auto to_steer = [](double rad) -> int16_t {
-    double tenths = std::round(rad * RAD_TO_DEG * 10.0);
+    double tenths = std::round(-rad * RAD_TO_DEG * 10.0);
     return static_cast<int16_t>(std::clamp(tenths, -900.0, 900.0));
   };
 
