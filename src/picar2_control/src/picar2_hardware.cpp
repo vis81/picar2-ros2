@@ -223,8 +223,8 @@ hardware_interface::CallbackReturn Picar2Hardware::on_deactivate(
   uint8_t stop_frame[10];
   uart_write(stop_frame, encode_frame(MSG_SET_RATE, stop_payload, 3, stop_frame));
 
-  // Zero velocity, neutral steer
-  uint8_t vel_payload[5] = {0, 0, 0, 0, 50};
+  // Zero velocity, neutral steer (0 = center)
+  uint8_t vel_payload[6] = {0, 0, 0, 0, 0, 0};
   uint8_t frame[16];
   uart_write(frame, encode_frame(MSG_CMD_VEL, vel_payload, sizeof(vel_payload), frame));
 
@@ -325,10 +325,10 @@ void Picar2Hardware::dispatch_joint_frame(const uint8_t * p, uint8_t len)
 
   double pos_left  = get_le32(&p[0]) * DEG_TO_RAD;
   double pos_right = get_le32(&p[4]) * DEG_TO_RAD;
-  double steer     = (50 - static_cast<int>(p[8])) / 50.0 * STEER_MAX_RAD;
-  double vel_left  = get_le16(&p[10]) * DEG_TO_RAD;
-  double vel_right = get_le16(&p[12]) * DEG_TO_RAD;
-  int64_t pi_us    = (len >= 22) ? get_le64(&p[14]) : 0LL;
+  double steer     = get_le16(&p[8]) / 10.0 * DEG_TO_RAD;
+  double vel_left  = get_le16(&p[11]) * DEG_TO_RAD;
+  double vel_right = get_le16(&p[13]) * DEG_TO_RAD;
+  int64_t pi_us    = (len >= 23) ? get_le64(&p[15]) : 0LL;
 
   {
     std::lock_guard<std::mutex> lk(state_mutex_);
@@ -498,17 +498,17 @@ hardware_interface::return_type Picar2Hardware::write(
       std::clamp(dps, static_cast<double>(INT16_MIN), static_cast<double>(INT16_MAX)));
   };
 
-  auto to_steer = [](double rad) -> uint8_t {
-    double val = std::round(50.0 - rad / STEER_MAX_RAD * 50.0);
-    return static_cast<uint8_t>(std::clamp(val, 0.0, 100.0));
+  auto to_steer = [](double rad) -> int16_t {
+    double tenths = std::round(rad * RAD_TO_DEG * 10.0);
+    return static_cast<int16_t>(std::clamp(tenths, -900.0, 900.0));
   };
 
   double cmd_steer = (cmd_steer_left_ + cmd_steer_right_) * 0.5;
 
-  uint8_t payload[5];
+  uint8_t payload[6];
   put_le16(&payload[0], to_dps(cmd_vel_back_left_));
   put_le16(&payload[2], to_dps(cmd_vel_back_right_));
-  payload[4] = to_steer(cmd_steer);
+  put_le16(&payload[4], to_steer(cmd_steer));
 
   uint8_t frame[16];
   uart_write(frame, encode_frame(MSG_CMD_VEL, payload, sizeof(payload), frame));
