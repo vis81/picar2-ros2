@@ -77,7 +77,7 @@ def generate_launch_description():
         package='imu_filter_madgwick',
         executable='imu_filter_madgwick_node',
         parameters=[{
-            'use_mag': True,
+            'use_mag': False,
             'publish_tf': False,
             'world_frame': 'enu',
         }],

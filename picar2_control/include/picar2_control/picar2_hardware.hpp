@@ -103,6 +103,9 @@ private:
   // Timesync — sync_last_t4_us_ written by reader thread, read by read()
   int64_t sync_last_t4_us_{0};
 
+  // IMU mounting-tilt correction: R = Ry(pitch) * Rx(roll), precomputed in on_init()
+  double imu_R_[3][3]{};
+
   // IMU publisher node (dedicated, so we can publish from reader thread)
   rclcpp::Node::SharedPtr imu_node_;
   rclcpp::Publisher<sensor_msgs::msg::Imu>::SharedPtr          imu_pub_;
