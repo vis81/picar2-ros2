@@ -16,6 +16,9 @@
       <!-- IMU mounting tilt (rad) — re-run `imu cal accel` and update if IMU is remounted -->
       <param name="imu_mount_roll">-0.1648</param>
       <param name="imu_mount_pitch">-0.0657</param>
+      <!-- Steering: µs per radian for servo0. Default: (max_pulse-min_pulse)/2 / max_steer_rad
+           = (2025-885)/2 / 0.6 = 950. Tune with circle test to correct servo linkage error. -->
+      <param name="steer_us_per_rad">950.0</param>
     </hardware>
 
     <!-- Rear drive wheels (velocity-controlled) -->

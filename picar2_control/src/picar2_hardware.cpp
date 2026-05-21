@@ -140,6 +140,9 @@ hardware_interface::CallbackReturn Picar2Hardware::on_init(
   imu_rate_hz_ = info_.hardware_parameters.count("imu_rate_hz")
     ? std::stoi(info_.hardware_parameters.at("imu_rate_hz")) : 50;
 
+  steer_us_per_rad_ = info_.hardware_parameters.count("steer_us_per_rad")
+    ? std::stod(info_.hardware_parameters.at("steer_us_per_rad")) : 950.0;
+
   double roll  = info_.hardware_parameters.count("imu_mount_roll")
     ? std::stod(info_.hardware_parameters.at("imu_mount_roll")) : 0.0;
   double pitch = info_.hardware_parameters.count("imu_mount_pitch")
@@ -336,7 +339,7 @@ void Picar2Hardware::dispatch_joint_frame(const uint8_t * p, uint8_t len)
 
   double pos_left  = get_le32(&p[0]) * DEG_TO_RAD;
   double pos_right = get_le32(&p[4]) * DEG_TO_RAD;
-  double steer     = get_le16(&p[8]) / 10.0 * DEG_TO_RAD;
+  double steer     = get_le16(&p[8]) / steer_us_per_rad_;
   double vel_left  = get_le16(&p[11]) * DEG_TO_RAD;
   double vel_right = get_le16(&p[13]) * DEG_TO_RAD;
   int64_t pi_us    = (len >= 23) ? get_le64(&p[15]) : 0LL;
@@ -521,9 +524,10 @@ hardware_interface::return_type Picar2Hardware::write(
       std::clamp(dps, static_cast<double>(INT16_MIN), static_cast<double>(INT16_MAX)));
   };
 
-  auto to_steer = [](double rad) -> int16_t {
-    double tenths = std::round(-rad * RAD_TO_DEG * 10.0);
-    return static_cast<int16_t>(std::clamp(tenths, -900.0, 900.0));
+  auto to_steer = [this](double rad) -> int16_t {
+    double delta = std::round(-rad * steer_us_per_rad_);
+    double limit = STEER_MAX_RAD * steer_us_per_rad_;
+    return static_cast<int16_t>(std::clamp(delta, -limit, limit));
   };
 
   double cmd_steer = (cmd_steer_left_ + cmd_steer_right_) * 0.5;
