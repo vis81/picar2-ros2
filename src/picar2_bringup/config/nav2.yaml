@@ -83,7 +83,7 @@ controller_server:
       regulated_linear_scaling_min_radius: 0.344
       regulated_linear_scaling_min_speed: 0.05
       use_rotate_to_heading: false          # Ackermann cannot spin in place
-      allow_reversing: false
+      allow_reversing: true
       max_angular_accel: 3.2
       max_robot_pose_search_dist: 10.0
 
