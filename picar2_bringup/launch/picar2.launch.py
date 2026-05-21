@@ -95,7 +95,7 @@ def generate_launch_description():
         condition=IfCondition(LaunchConfiguration('lidar')),
         parameters=[{
             'target_rpm':   300.0,
-            'angle_offset': -2.8,
+            'angle_offset': -2.6,
         }],
     )
 
