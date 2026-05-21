@@ -339,7 +339,7 @@ void Picar2Hardware::dispatch_joint_frame(const uint8_t * p, uint8_t len)
 
   double pos_left  = get_le32(&p[0]) * DEG_TO_RAD;
   double pos_right = get_le32(&p[4]) * DEG_TO_RAD;
-  double steer     = get_le16(&p[8]) / steer_us_per_rad_;
+  double steer     = -get_le16(&p[8]) / steer_us_per_rad_;
   double vel_left  = get_le16(&p[11]) * DEG_TO_RAD;
   double vel_right = get_le16(&p[13]) * DEG_TO_RAD;
   int64_t pi_us    = (len >= 23) ? get_le64(&p[15]) : 0LL;
