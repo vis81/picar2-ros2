@@ -351,7 +351,7 @@ class App(tk.Tk):
         s, t = p
         self.v_status.set(f'Circle CW — speed {s:.2f} m/s, turn {t:.2f} rad/s…')
         self.v_suggestion.set('—')
-        self.node.start_circle(s, t, on_done=self._circle_done)
+        self.node.start_circle(s, -t, on_done=self._circle_done)
 
     def _circle_ccw(self):
         p = self._circle_params()
@@ -360,7 +360,7 @@ class App(tk.Tk):
         s, t = p
         self.v_status.set(f'Circle CCW — speed {s:.2f} m/s, turn {t:.2f} rad/s…')
         self.v_suggestion.set('—')
-        self.node.start_circle(s, -t, on_done=self._circle_done)
+        self.node.start_circle(s, t, on_done=self._circle_done)
 
     def _circle_stop(self):
         self.node.stop_circle()
