@@ -9,6 +9,7 @@ install(DIRECTORY launch config
 
 install(PROGRAMS
   picar2_bringup/cmd_vel_relay.py
+  picar2_bringup/odom_cal.py
   DESTINATION lib/${PROJECT_NAME}
 )
 
