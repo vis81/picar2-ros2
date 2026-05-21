@@ -1,8 +1,9 @@
 <?xml version="1.0" encoding="utf-8"?>
 <robot name="picar2" xmlns:xacro="http://ros.org/wiki/xacro">
 
-  <xacro:arg name="port" default="/dev/ttyYahboom0"/>
-  <xacro:arg name="baud" default="460800"/>
+  <xacro:arg name="port"    default="/dev/ttyYahboom0"/>
+  <xacro:arg name="baud"    default="460800"/>
+  <xacro:arg name="use_sim" default="false"/>
 
   <!-- ═══════════════════════════════════════════════════
        ros2_control block — joint names match URDF joints
@@ -10,15 +11,20 @@
        ═══════════════════════════════════════════════════ -->
   <ros2_control name="picar2" type="system">
     <hardware>
-      <plugin>picar2_control/Picar2Hardware</plugin>
-      <param name="port">$(arg port)</param>
-      <param name="baud">$(arg baud)</param>
-      <!-- IMU mounting tilt (rad) — re-run `imu cal accel` and update if IMU is remounted -->
-      <param name="imu_mount_roll">-0.1648</param>
-      <param name="imu_mount_pitch">-0.0657</param>
-      <!-- Steering: µs per radian for servo0. Default: (max_pulse-min_pulse)/2 / max_steer_rad
-           = (2025-885)/2 / 0.6 = 950. Tune with circle test to correct servo linkage error. -->
-      <param name="steer_us_per_rad">1020.0</param>
+      <xacro:if value="$(arg use_sim)">
+        <plugin>gz_ros2_control/GazeboSimSystem</plugin>
+      </xacro:if>
+      <xacro:unless value="$(arg use_sim)">
+        <plugin>picar2_control/Picar2Hardware</plugin>
+        <param name="port">$(arg port)</param>
+        <param name="baud">$(arg baud)</param>
+        <!-- IMU mounting tilt (rad) — re-run `imu cal accel` and update if IMU is remounted -->
+        <param name="imu_mount_roll">-0.1648</param>
+        <param name="imu_mount_pitch">-0.0657</param>
+        <!-- Steering: µs per radian for servo0. Default: (max_pulse-min_pulse)/2 / max_steer_rad
+             = (2025-885)/2 / 0.6 = 950. Tune with circle test to correct servo linkage error. -->
+        <param name="steer_us_per_rad">1020.0</param>
+      </xacro:unless>
     </hardware>
 
     <!-- Rear drive wheels (velocity-controlled) -->
@@ -59,6 +65,16 @@
     </joint>
   </ros2_control>
 
+  <!-- Gazebo: gz_ros2_control plugin (sim only) -->
+  <xacro:if value="$(arg use_sim)">
+    <gazebo>
+      <plugin filename="gz_ros2_control-system"
+              name="gz_ros2_control::GazeboSimROS2ControlPlugin">
+        <parameters>$(find picar2_bringup)/config/controllers.yaml</parameters>
+      </plugin>
+    </gazebo>
+  </xacro:if>
+
   <!-- ═══════════════════════════════════════════════════
        Links
        ═══════════════════════════════════════════════════ -->
@@ -80,8 +96,8 @@
       <material name=""><color rgba="0 0.62745 0.23529 1"/></material>
     </visual>
     <collision>
-      <origin xyz="0 0 0" rpy="0 0 0"/>
-      <geometry><mesh filename="package://picar2_description/meshes/base_link.STL"/></geometry>
+      <origin xyz="0 0 0.04" rpy="0 0 0"/>
+      <geometry><box size="0.24 0.17 0.08"/></geometry>
     </collision>
   </link>
 
@@ -99,8 +115,8 @@
       <material name=""><color rgba="0.79216 0.81961 0.93333 1"/></material>
     </visual>
     <collision>
-      <origin xyz="0 0 0" rpy="0 0 0"/>
-      <geometry><mesh filename="package://picar2_description/meshes/back_right_link.STL"/></geometry>
+      <origin xyz="0 0 0" rpy="1.5708 0 0"/>
+      <geometry><cylinder radius="0.033" length="0.025"/></geometry>
     </collision>
   </link>
 
@@ -118,8 +134,8 @@
       <material name=""><color rgba="0.79216 0.81961 0.93333 1"/></material>
     </visual>
     <collision>
-      <origin xyz="0 0 0" rpy="0 0 0"/>
-      <geometry><mesh filename="package://picar2_description/meshes/back_right_link.STL"/></geometry>
+      <origin xyz="0 0 0" rpy="1.5708 0 0"/>
+      <geometry><cylinder radius="0.033" length="0.025"/></geometry>
     </collision>
   </link>
 
@@ -137,8 +153,8 @@
       <material name=""><color rgba="0.082353 0.56078 0 1"/></material>
     </visual>
     <collision>
-      <origin xyz="0 0 0" rpy="0 0 0"/>
-      <geometry><mesh filename="package://picar2_description/meshes/front_left_steer.STL"/></geometry>
+      <origin xyz="0 0 -0.01" rpy="0 0 0"/>
+      <geometry><box size="0.02 0.02 0.03"/></geometry>
     </collision>
   </link>
 
@@ -156,8 +172,8 @@
       <material name=""><color rgba="0.79216 0.81961 0.93333 1"/></material>
     </visual>
     <collision>
-      <origin xyz="0 0 0" rpy="0 0 0"/>
-      <geometry><mesh filename="package://picar2_description/meshes/back_right_link.STL"/></geometry>
+      <origin xyz="0 0 0" rpy="1.5708 0 0"/>
+      <geometry><cylinder radius="0.033" length="0.025"/></geometry>
     </collision>
   </link>
 
@@ -175,8 +191,8 @@
       <material name=""><color rgba="0.082353 0.56078 0 1"/></material>
     </visual>
     <collision>
-      <origin xyz="0 0 0" rpy="0 0 0"/>
-      <geometry><mesh filename="package://picar2_description/meshes/front_left_steer.STL"/></geometry>
+      <origin xyz="0 0 -0.01" rpy="0 0 0"/>
+      <geometry><box size="0.02 0.02 0.03"/></geometry>
     </collision>
   </link>
 
@@ -194,8 +210,8 @@
       <material name=""><color rgba="0.79216 0.81961 0.93333 1"/></material>
     </visual>
     <collision>
-      <origin xyz="0 0 0" rpy="0 0 0"/>
-      <geometry><mesh filename="package://picar2_description/meshes/back_right_link.STL"/></geometry>
+      <origin xyz="0 0 0" rpy="1.5708 0 0"/>
+      <geometry><cylinder radius="0.033" length="0.025"/></geometry>
     </collision>
   </link>
 
@@ -213,7 +229,7 @@
     </visual>
     <collision>
       <origin xyz="0 0 0" rpy="0 0 0"/>
-      <geometry><mesh filename="package://picar2_description/meshes/laser_link.STL"/></geometry>
+      <geometry><box size="0.07 0.07 0.05"/></geometry>
     </collision>
   </link>
 
@@ -238,6 +254,7 @@
     <parent link="base_link"/>
     <child  link="back_right_link"/>
     <axis xyz="0 1 0"/>
+    <dynamics damping="0.01" friction="0.0"/>
   </joint>
 
   <joint name="back_left_joint" type="continuous">
@@ -245,6 +262,7 @@
     <parent link="base_link"/>
     <child  link="back_left_link"/>
     <axis xyz="0 1 0"/>
+    <dynamics damping="0.01" friction="0.0"/>
   </joint>
 
   <!-- Front steering knuckles (revolute — single servo via linkage) -->
@@ -254,6 +272,7 @@
     <child  link="front_left_steer"/>
     <axis xyz="0 0 1"/>
     <limit lower="-0.6" upper="0.6" effort="10" velocity="1"/>
+    <dynamics damping="0.01" friction="0.0"/>
   </joint>
 
   <joint name="front_right_steer_joint" type="revolute">
@@ -262,6 +281,7 @@
     <child  link="front_right_steer"/>
     <axis xyz="0 0 1"/>
     <limit lower="-0.6" upper="0.6" effort="10" velocity="1"/>
+    <dynamics damping="0.01" friction="0.0"/>
   </joint>
 
   <!-- Front wheels (passive — follow steer knuckle) -->
@@ -270,6 +290,7 @@
     <parent link="front_left_steer"/>
     <child  link="front_left_wheel"/>
     <axis xyz="0 -1 0"/>
+    <dynamics damping="0.01" friction="0.0"/>
   </joint>
 
   <joint name="front_right_wheel_joint" type="continuous">
@@ -277,14 +298,86 @@
     <parent link="front_right_steer"/>
     <child  link="front_right_wheel"/>
     <axis xyz="0 1 0"/>
+    <dynamics damping="0.01" friction="0.0"/>
   </joint>
 
   <!-- Sensors (fixed) -->
-
   <joint name="laser_joint" type="fixed">
     <origin xyz="0.012548 0 0.147" rpy="0 0 0"/>
     <parent link="base_link"/>
     <child  link="laser_link"/>
   </joint>
+
+  <!-- ═══════════════════════════════════════════════════
+       Gazebo properties (sim only)
+       ═══════════════════════════════════════════════════ -->
+
+  <!-- Drive wheel friction -->
+  <gazebo reference="back_left_link">
+    <mu1>1.0</mu1><mu2>1.0</mu2>
+    <kp>1e6</kp><kd>1.0</kd>
+  </gazebo>
+  <gazebo reference="back_right_link">
+    <mu1>1.0</mu1><mu2>1.0</mu2>
+    <kp>1e6</kp><kd>1.0</kd>
+  </gazebo>
+  <!-- Front wheels low friction (steered, not driven) -->
+  <gazebo reference="front_left_wheel">
+    <mu1>0.5</mu1><mu2>0.5</mu2>
+  </gazebo>
+  <gazebo reference="front_right_wheel">
+    <mu1>0.5</mu1><mu2>0.5</mu2>
+  </gazebo>
+
+  <!-- IMU sensor -->
+  <gazebo reference="imu_link">
+    <sensor name="imu_sensor" type="imu">
+      <always_on>1</always_on>
+      <update_rate>50</update_rate>
+      <topic>/model/picar2/imu</topic>
+      <gz_frame_id>imu_link</gz_frame_id>
+      <imu>
+        <angular_velocity>
+          <x><noise type="gaussian"><mean>0</mean><stddev>0.009</stddev></noise></x>
+          <y><noise type="gaussian"><mean>0</mean><stddev>0.009</stddev></noise></y>
+          <z><noise type="gaussian"><mean>0</mean><stddev>0.009</stddev></noise></z>
+        </angular_velocity>
+        <linear_acceleration>
+          <x><noise type="gaussian"><mean>0</mean><stddev>0.021</stddev></noise></x>
+          <y><noise type="gaussian"><mean>0</mean><stddev>0.021</stddev></noise></y>
+          <z><noise type="gaussian"><mean>0</mean><stddev>0.021</stddev></noise></z>
+        </linear_acceleration>
+      </imu>
+    </sensor>
+  </gazebo>
+
+  <!-- LiDAR sensor -->
+  <gazebo reference="laser_link">
+    <sensor name="lidar" type="gpu_lidar">
+      <always_on>1</always_on>
+      <update_rate>10</update_rate>
+      <topic>/model/picar2/scan</topic>
+      <gz_frame_id>laser_link</gz_frame_id>
+      <lidar>
+        <scan>
+          <horizontal>
+            <samples>360</samples>
+            <resolution>1</resolution>
+            <min_angle>-3.14159265</min_angle>
+            <max_angle>3.14159265</max_angle>
+          </horizontal>
+        </scan>
+        <range>
+          <min>0.06</min>
+          <max>5.0</max>
+          <resolution>0.001</resolution>
+        </range>
+        <noise type="gaussian">
+          <mean>0.0</mean>
+          <stddev>0.01</stddev>
+        </noise>
+      </lidar>
+    </sensor>
+  </gazebo>
 
 </robot>
