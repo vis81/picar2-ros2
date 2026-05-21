@@ -103,6 +103,9 @@ private:
   // Timesync — sync_last_t4_us_ written by reader thread, read by read()
   int64_t sync_last_t4_us_{0};
 
+  // Steering: µs per radian for servo0 — read from URDF param steer_us_per_rad
+  double steer_us_per_rad_{950.0};
+
   // IMU mounting-tilt correction: R = Ry(pitch) * Rx(roll), precomputed in on_init()
   double imu_R_[3][3]{};
 
