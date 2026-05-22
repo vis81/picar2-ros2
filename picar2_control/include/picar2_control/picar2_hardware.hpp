@@ -103,8 +103,11 @@ private:
   // Timesync — sync_last_t4_us_ written by reader thread, read by read()
   int64_t sync_last_t4_us_{0};
 
-  // Steering: µs per radian for servo0 — read from URDF param steer_us_per_rad
-  double steer_us_per_rad_{950.0};
+  // Steering LUT: sorted by delta_us ascending; rad in ROS convention (positive = left turn)
+  struct SteerLutEntry { int16_t us; float rad; };
+  std::vector<SteerLutEntry> steer_lut_;
+  double  lut_us_to_rad(int16_t us_val) const;
+  int16_t lut_rad_to_us(double rad_val) const;
 
   // IMU mounting-tilt correction: R = Ry(pitch) * Rx(roll), precomputed in on_init()
   double imu_R_[3][3]{};
