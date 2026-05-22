@@ -25,6 +25,15 @@ class OdomCalNode(Node):
         self.declare_parameter('wheelbase', 0.235)
         self._wheelbase = self.get_parameter('wheelbase').value
 
+        self.declare_parameter('steer_lut_us',
+                               [-595, -347, -298, -149, 0, 136, 272, 408, 545])
+        self.declare_parameter('steer_lut_rad',
+                               [0.6756, 0.4224, 0.3368, 0.1728, 0.0,
+                                -0.1239, -0.2443, -0.4014, -0.6109])
+        _us  = list(self.get_parameter('steer_lut_us').value)
+        _rad = list(self.get_parameter('steer_lut_rad').value)
+        self._steer_lut = list(zip(_us, _rad))  # [(us, rad)...] us asc, rad desc
+
         self.pub = self.create_publisher(Twist, '/cmd_vel', 1)
         self.create_subscription(
             Odometry,
@@ -57,6 +66,20 @@ class OdomCalNode(Node):
     @property
     def wheelbase(self):
         return self._wheelbase
+
+    def lut_rad_to_us(self, rad_val: float) -> int:
+        lut = self._steer_lut
+        if len(lut) < 2:
+            return 0
+        if rad_val >= lut[0][1]:
+            return lut[0][0]
+        if rad_val <= lut[-1][1]:
+            return lut[-1][0]
+        for i in range(1, len(lut)):
+            if rad_val >= lut[i][1]:
+                t = (rad_val - lut[i-1][1]) / (lut[i][1] - lut[i-1][1])
+                return round(lut[i-1][0] + t * (lut[i][0] - lut[i-1][0]))
+        return lut[-1][0]
 
     # ── odometry callback ─────────────────────────────────────────────────
 
@@ -265,12 +288,6 @@ class App(tk.Tk):
         ttk.Spinbox(fci, textvariable=self.v_cturn, from_=0.1, to=1.2,
                     increment=0.05, width=7, format='%.2f').grid(row=0, column=3, padx=(2, 8))
 
-        ttk.Label(fci, text='Current steer_us_per_rad:').grid(
-            row=0, column=4, sticky='e', padx=(12, 2))
-        self.v_steer_param = tk.DoubleVar(value=950.0)
-        ttk.Spinbox(fci, textvariable=self.v_steer_param, from_=100.0, to=2000.0,
-                    increment=10.0, width=8, format='%.1f').grid(row=0, column=5, padx=(2, 8))
-
         self.btn_ccw = ttk.Button(fci, text='◄ CCW', width=10, command=self._circle_ccw)
         self.btn_ccw.grid(row=1, column=0, **P)
         self.btn_cstop = ttk.Button(fci, text='■ Stop', width=10, command=self._circle_stop)
@@ -318,20 +335,10 @@ class App(tk.Tk):
         ttk.Label(lr, textvariable=self.v_lut_point, anchor='w',
                   font=('Courier', 11, 'bold')).pack(side='left')
 
-        # Row 5: suggested steer_us_per_rad (existing wheel-radius cal output)
-        sr = ttk.Frame(fci)
-        sr.grid(row=5, column=0, columnspan=6, sticky='ew', padx=8, pady=(2, 2))
-        ttk.Label(sr, text='Suggested steer_us_per_rad:').pack(side='left')
-        self.v_suggestion = tk.StringVar(value='—')
-        ttk.Label(sr, textvariable=self.v_suggestion, font=('Courier', 11, 'bold'),
-                  width=8).pack(side='left', padx=(4, 8))
-        ttk.Label(sr, text='(apply in picar2.urdf.xacro → rebuild)',
-                  foreground='gray').pack(side='left')
-
-        # Row 6: progress bar
+        # Row 5: progress bar
         self.v_cprog = tk.DoubleVar(value=0.0)
         ttk.Progressbar(fci, variable=self.v_cprog, maximum=1.0,
-                        length=220).grid(row=6, column=0, columnspan=6,
+                        length=220).grid(row=5, column=0, columnspan=6,
                                          padx=8, pady=(2, 6), sticky='ew')
 
         # Status
@@ -401,7 +408,6 @@ class App(tk.Tk):
         self._last_circle_speed = s
         self._last_circle_turn  = -t
         self.v_status.set(f'Circle CW — speed {s:.2f} m/s, turn {t:.2f} rad/s…')
-        self.v_suggestion.set('—')
         self.v_turn_r.set('—')
         self.v_actual_steer.set('—')
         self.v_cmd_steer.set('—')
@@ -416,7 +422,6 @@ class App(tk.Tk):
         self._last_circle_speed = s
         self._last_circle_turn  = t
         self.v_status.set(f'Circle CCW — speed {s:.2f} m/s, turn {t:.2f} rad/s…')
-        self.v_suggestion.set('—')
         self.v_turn_r.set('—')
         self.v_actual_steer.set('—')
         self.v_cmd_steer.set('—')
@@ -431,14 +436,6 @@ class App(tk.Tk):
                      pos_err: float, arc_length: float):
         imu_deg  = math.degrees(abs(imu_accum))
         odom_deg = math.degrees(abs(odom_accum))
-
-        try:
-            current_param = float(self.v_steer_param.get())
-        except (ValueError, tk.TclError):
-            current_param = 950.0
-
-        suggestion = f'{current_param * abs(odom_accum) / abs(imu_accum):.1f}' \
-                     if abs(imu_accum) > 0.1 else '—'
 
         # turn radius and actual steer angle from arc length
         wb = self.node.wheelbase
@@ -460,7 +457,7 @@ class App(tk.Tk):
         if abs(v) > 0.001:
             cmd_steer_rad = math.atan(wb * w / v)
             cmd_steer_deg = math.degrees(cmd_steer_rad)
-            cmd_delta_us  = round(-cmd_steer_rad * current_param)
+            cmd_delta_us  = self.node.lut_rad_to_us(cmd_steer_rad)
             cs_str = f'{cmd_steer_deg:+.2f}'
         else:
             cmd_steer_rad = None
@@ -477,7 +474,6 @@ class App(tk.Tk):
             self.v_imu_yaw.set(f'{imu_deg:+.1f}')
             self.v_odom_yaw.set(f'{odom_deg:+.1f}')
             self.v_pos_err.set(f'{pos_err:.4f}')
-            self.v_suggestion.set(suggestion)
             self.v_turn_r.set(r_str)
             self.v_actual_steer.set(as_str)
             self.v_cmd_steer.set(cs_str)
