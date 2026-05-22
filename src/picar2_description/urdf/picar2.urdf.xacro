@@ -21,9 +21,11 @@
         <!-- IMU mounting tilt (rad) — re-run `imu cal accel` and update if IMU is remounted -->
         <param name="imu_mount_roll">-0.1648</param>
         <param name="imu_mount_pitch">-0.0657</param>
-        <!-- Steering: µs per radian for servo0. Default: (max_pulse-min_pulse)/2 / max_steer_rad
-             = (2025-885)/2 / 0.6 = 950. Tune with circle test to correct servo linkage error. -->
-        <param name="steer_us_per_rad">1020.0</param>
+        <!-- Steering LUT: delta_us from servo center (ascending) and steer_rad in ROS convention
+             (positive = left turn, so positive deg measurement is negated here).
+             Measured 2026-05-22 from wheel-angle photo; refine with odom_cal circle test. -->
+        <param name="steer_lut_us">-595 -347 -298 -149 0 136 272 408 545</param>
+        <param name="steer_lut_rad">0.6756 0.4224 0.3368 0.1728 0.0 -0.1239 -0.2443 -0.4014 -0.6109</param>
       </xacro:unless>
     </hardware>
 

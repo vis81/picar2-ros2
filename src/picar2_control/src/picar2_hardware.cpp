@@ -12,6 +12,7 @@
 #include <chrono>
 #include <cmath>
 #include <cstring>
+#include <sstream>
 
 #include "hardware_interface/types/hardware_interface_type_values.hpp"
 #include "pluginlib/class_list_macros.hpp"
@@ -140,8 +141,46 @@ hardware_interface::CallbackReturn Picar2Hardware::on_init(
   imu_rate_hz_ = info_.hardware_parameters.count("imu_rate_hz")
     ? std::stoi(info_.hardware_parameters.at("imu_rate_hz")) : 50;
 
-  steer_us_per_rad_ = info_.hardware_parameters.count("steer_us_per_rad")
-    ? std::stod(info_.hardware_parameters.at("steer_us_per_rad")) : 950.0;
+  // ── Steering LUT ──────────────────────────────────────────────────────────
+  // rad in ROS convention: positive = left turn = negative delta_us
+  auto parse_floats = [](const std::string & s) {
+    std::vector<float> v; std::istringstream ss(s); float x;
+    while (ss >> x) v.push_back(x);
+    return v;
+  };
+  auto parse_ints = [](const std::string & s) {
+    std::vector<int> v; std::istringstream ss(s); int x;
+    while (ss >> x) v.push_back(x);
+    return v;
+  };
+
+  if (info_.hardware_parameters.count("steer_lut_us") &&
+      info_.hardware_parameters.count("steer_lut_rad")) {
+    auto us_vec  = parse_ints(info_.hardware_parameters.at("steer_lut_us"));
+    auto rad_vec = parse_floats(info_.hardware_parameters.at("steer_lut_rad"));
+    if (us_vec.size() < 2 || us_vec.size() != rad_vec.size()) {
+      RCLCPP_ERROR(get_logger(), "steer_lut_us/rad must have matching size >= 2");
+      return hardware_interface::CallbackReturn::ERROR;
+    }
+    steer_lut_.resize(us_vec.size());
+    for (size_t i = 0; i < us_vec.size(); ++i) {
+      steer_lut_[i] = {static_cast<int16_t>(us_vec[i]), rad_vec[i]};
+    }
+  } else if (info_.hardware_parameters.count("steer_us_per_rad")) {
+    // Legacy single-slope — build a 3-point linear LUT for backward compat
+    auto scale = static_cast<float>(std::stod(info_.hardware_parameters.at("steer_us_per_rad")));
+    int16_t lim = static_cast<int16_t>(std::round(STEER_MAX_RAD * scale));
+    steer_lut_ = {{static_cast<int16_t>(-lim),  static_cast<float>(STEER_MAX_RAD)},
+                  {0, 0.0f},
+                  {lim, -static_cast<float>(STEER_MAX_RAD)}};
+  } else {
+    // Default calibration LUT — measured 2026-05-22 from wheel angle photo
+    steer_lut_ = {
+      {-595,  0.6756f}, {-347,  0.4224f}, {-298,  0.3368f}, {-149,  0.1728f},
+      {   0,  0.0000f},
+      { 136, -0.1239f}, { 272, -0.2443f}, { 408, -0.4014f}, { 545, -0.6109f},
+    };
+  }
 
   double roll  = info_.hardware_parameters.count("imu_mount_roll")
     ? std::stod(info_.hardware_parameters.at("imu_mount_roll")) : 0.0;
@@ -339,7 +378,7 @@ void Picar2Hardware::dispatch_joint_frame(const uint8_t * p, uint8_t len)
 
   double pos_left  = get_le32(&p[0]) * DEG_TO_RAD;
   double pos_right = get_le32(&p[4]) * DEG_TO_RAD;
-  double steer     = -get_le16(&p[8]) / steer_us_per_rad_;
+  double steer     = lut_us_to_rad(get_le16(&p[8]));
   double vel_left  = get_le16(&p[11]) * DEG_TO_RAD;
   double vel_right = get_le16(&p[13]) * DEG_TO_RAD;
   int64_t pi_us    = (len >= 23) ? get_le64(&p[15]) : 0LL;
@@ -524,23 +563,52 @@ hardware_interface::return_type Picar2Hardware::write(
       std::clamp(dps, static_cast<double>(INT16_MIN), static_cast<double>(INT16_MAX)));
   };
 
-  auto to_steer = [this](double rad) -> int16_t {
-    double delta = std::round(-rad * steer_us_per_rad_);
-    double limit = STEER_MAX_RAD * steer_us_per_rad_;
-    return static_cast<int16_t>(std::clamp(delta, -limit, limit));
-  };
-
   double cmd_steer = (cmd_steer_left_ + cmd_steer_right_) * 0.5;
 
   uint8_t payload[6];
   put_le16(&payload[0], to_dps(cmd_vel_back_left_));
   put_le16(&payload[2], to_dps(cmd_vel_back_right_));
-  put_le16(&payload[4], to_steer(cmd_steer));
+  put_le16(&payload[4], lut_rad_to_us(cmd_steer));
 
   uint8_t frame[16];
   uart_write(frame, encode_frame(MSG_CMD_VEL, payload, sizeof(payload), frame));
 
   return hardware_interface::return_type::OK;
+}
+
+// ── Steering LUT interpolation ────────────────────────────────────────────────
+// LUT is sorted by us ascending; rad is monotonically decreasing (pos us → neg rad).
+
+double Picar2Hardware::lut_us_to_rad(int16_t us_val) const
+{
+  if (steer_lut_.size() < 2) return 0.0;
+  if (us_val <= steer_lut_.front().us) return steer_lut_.front().rad;
+  if (us_val >= steer_lut_.back().us)  return steer_lut_.back().rad;
+  for (size_t i = 1; i < steer_lut_.size(); ++i) {
+    if (us_val <= steer_lut_[i].us) {
+      double t = static_cast<double>(us_val - steer_lut_[i-1].us) /
+                 static_cast<double>(steer_lut_[i].us - steer_lut_[i-1].us);
+      return steer_lut_[i-1].rad + t * (steer_lut_[i].rad - steer_lut_[i-1].rad);
+    }
+  }
+  return steer_lut_.back().rad;
+}
+
+int16_t Picar2Hardware::lut_rad_to_us(double rad_val) const
+{
+  if (steer_lut_.size() < 2) return 0;
+  // rad decreases as us increases: front has max rad, back has min rad
+  if (rad_val >= steer_lut_.front().rad) return steer_lut_.front().us;
+  if (rad_val <= steer_lut_.back().rad)  return steer_lut_.back().us;
+  for (size_t i = 1; i < steer_lut_.size(); ++i) {
+    if (rad_val >= static_cast<double>(steer_lut_[i].rad)) {
+      double t = (rad_val - steer_lut_[i-1].rad) /
+                 (static_cast<double>(steer_lut_[i].rad) - steer_lut_[i-1].rad);
+      return static_cast<int16_t>(
+        std::round(steer_lut_[i-1].us + t * (steer_lut_[i].us - steer_lut_[i-1].us)));
+    }
+  }
+  return steer_lut_.back().us;
 }
 
 }  // namespace picar2_control
