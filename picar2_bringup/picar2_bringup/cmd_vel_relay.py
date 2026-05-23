@@ -7,6 +7,9 @@ from rclpy.node import Node
 from geometry_msgs.msg import Twist, TwistStamped
 
 
+MAX_ANG_VEL = 0.5  # rad/s — clamp all sources (teleop, nav2, explore)
+
+
 class CmdVelRelay(Node):
     def __init__(self):
         super().__init__('cmd_vel_relay')
@@ -20,6 +23,7 @@ class CmdVelRelay(Node):
         out = TwistStamped()
         out.header.stamp = self.get_clock().now().to_msg()
         out.twist = msg
+        out.twist.angular.z = max(-MAX_ANG_VEL, min(MAX_ANG_VEL, msg.angular.z))
         self.pub.publish(out)
 
 
