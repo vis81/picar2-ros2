@@ -337,10 +337,25 @@ void Picar2Hardware::reader_loop()
     FD_ZERO(&rset);
     FD_SET(fd_, &rset);
     struct timeval tv{0, 10000};  // 10 ms wake interval
-    if (select(fd_ + 1, &rset, nullptr, nullptr, &tv) <= 0) continue;
+    int sel = select(fd_ + 1, &rset, nullptr, nullptr, &tv);
+    if (sel < 0) {
+      if (errno != EINTR) {
+        RCLCPP_ERROR_THROTTLE(get_logger(), *get_clock(), 1000,
+          "select: %s", std::strerror(errno));
+      }
+      continue;
+    }
+    if (sel == 0) continue;
 
     uint8_t buf[64];
     ssize_t n = ::read(fd_, buf, sizeof(buf));
+    if (n < 0) {
+      if (errno != EAGAIN && errno != EINTR) {
+        RCLCPP_ERROR_THROTTLE(get_logger(), *get_clock(), 1000,
+          "read: %s", std::strerror(errno));
+      }
+      continue;
+    }
     for (ssize_t i = 0; i < n; i++) {
       process_byte(buf[i]);
     }
@@ -467,7 +482,12 @@ void Picar2Hardware::process_byte(uint8_t b)
       break;
 
     case DecodeState::LEN:
-      if (b > PROTO_MAX_LEN) { decode_state_ = DecodeState::START; break; }
+      if (b > PROTO_MAX_LEN) {
+        RCLCPP_WARN_THROTTLE(get_logger(), *get_clock(), 1000,
+          "proto: bad length %u on type 0x%02x — resync", b, rx_type_);
+        decode_state_ = DecodeState::START;
+        break;
+      }
       rx_len_       = b;
       rx_pos_       = 0;
       decode_state_ = (b > 0) ? DecodeState::PAYLOAD : DecodeState::CRC;
@@ -491,7 +511,13 @@ void Picar2Hardware::process_byte(uint8_t b)
           dispatch_imu_frame(rx_buf_, rx_len_);
         } else if (rx_type_ == MSG_TIMESYNC_RESP && rx_len_ >= 8) {
           dispatch_timesync_resp();
+        } else {
+          RCLCPP_WARN_THROTTLE(get_logger(), *get_clock(), 1000,
+            "proto: unhandled type 0x%02x len %u", rx_type_, rx_len_);
         }
+      } else {
+        RCLCPP_WARN_THROTTLE(get_logger(), *get_clock(), 1000,
+          "proto: CRC mismatch type 0x%02x len %u", rx_type_, rx_len_);
       }
       decode_state_ = DecodeState::START;
       break;
@@ -522,7 +548,9 @@ hardware_interface::return_type Picar2Hardware::read(
                                  [this] { return joint_ready_; });
   if (!got) {
     lk.unlock();
-    RCLCPP_WARN_THROTTLE(get_logger(), *get_clock(), 1000, "no JOINT response within 5ms");
+    static uint32_t joint_to = 0;
+    joint_to++;
+    RCLCPP_WARN_THROTTLE(get_logger(), *get_clock(), 1000, "no JOINT response within 5ms (%u)", joint_to);
     return hardware_interface::return_type::OK;
   }
 
