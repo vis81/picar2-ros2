@@ -284,8 +284,8 @@ class App(tk.Tk):
                     increment=0.05, width=7, format='%.2f').grid(row=0, column=1, padx=(2, 12))
 
         ttk.Label(fci, text='Turn (rad/s):').grid(row=0, column=2, sticky='e', padx=(0, 2))
-        self.v_cturn = tk.DoubleVar(value=0.60)
-        ttk.Spinbox(fci, textvariable=self.v_cturn, from_=0.1, to=1.2,
+        self.v_cturn = tk.DoubleVar(value=0.50)
+        ttk.Spinbox(fci, textvariable=self.v_cturn, from_=0.1, to=0.5,
                     increment=0.05, width=7, format='%.2f').grid(row=0, column=3, padx=(2, 8))
 
         self.btn_ccw = ttk.Button(fci, text='◄ CCW', width=10, command=self._circle_ccw)
