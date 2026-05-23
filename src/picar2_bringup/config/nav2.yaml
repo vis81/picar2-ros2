@@ -24,7 +24,7 @@ planner_server:
       max_iterations: 1000000
       max_planning_time: 5.0
       motion_model_for_search: REEDS_SHEPP   # allows forward + reverse
-      angle_quantization_bins: 72            # 5° resolution
+      angle_quantization_bins: 36            # 10° resolution — 72 caused ~42 s startup on Pi 4
       analytic_expansion_ratio: 3.5
       analytic_expansion_max_length: 3.0
       minimum_turning_radius: 0.344          # wheelbase / tan(max_steer) = 0.235 / tan(0.6)
