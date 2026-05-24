@@ -17,6 +17,8 @@ def generate_launch_description():
     baud_arg  = DeclareLaunchArgument('baud',  default_value='460800')
     lidar_arg = DeclareLaunchArgument('lidar', default_value='true',
                                       description='Launch the LiDAR node')
+    use_mag_arg = DeclareLaunchArgument('use_mag', default_value='false',
+                                        description='Enable magnetometer fusion in Madgwick filter')
     calib_arg = DeclareLaunchArgument(
         'calib_file',
         default_value=str(bringup_share / 'config' / 'imu_calib.yaml'),
@@ -97,7 +99,7 @@ def generate_launch_description():
         package='imu_filter_madgwick',
         executable='imu_filter_madgwick_node',
         parameters=[{
-            'use_mag': False,
+            'use_mag': LaunchConfiguration('use_mag'),
             'publish_tf': False,
             'world_frame': 'enu',
         }],
@@ -123,6 +125,7 @@ def generate_launch_description():
         port_arg,
         baud_arg,
         lidar_arg,
+        use_mag_arg,
         calib_arg,
         ros2_control_node,
         robot_state_publisher,
