@@ -182,16 +182,6 @@ hardware_interface::CallbackReturn Picar2Hardware::on_init(
     };
   }
 
-  double roll  = info_.hardware_parameters.count("imu_mount_roll")
-    ? std::stod(info_.hardware_parameters.at("imu_mount_roll")) : 0.0;
-  double pitch = info_.hardware_parameters.count("imu_mount_pitch")
-    ? std::stod(info_.hardware_parameters.at("imu_mount_pitch")) : 0.0;
-
-  double cr = std::cos(roll), sr = std::sin(roll);
-  double cp = std::cos(pitch), sp = std::sin(pitch);
-  imu_R_[0][0] = cp;   imu_R_[0][1] = sp * sr;  imu_R_[0][2] = sp * cr;
-  imu_R_[1][0] = 0.0;  imu_R_[1][1] = cr;        imu_R_[1][2] = -sr;
-  imu_R_[2][0] = -sp;  imu_R_[2][1] = cp * sr;   imu_R_[2][2] = cp * cr;
 
   return hardware_interface::CallbackReturn::SUCCESS;
 }
@@ -439,14 +429,12 @@ void Picar2Hardware::dispatch_imu_frame(const uint8_t * p, uint8_t len)
   double gy0 = -get_le16(&p[6])  * 0.001;  // chip gyro X → robot -Y
   double gz0 =  get_le16(&p[10]) * 0.001;
 
-  // Mounting-tilt correction: rotate from physical chip frame → base_link–aligned frame.
-  // Matrix precomputed in on_init() from imu_mount_roll / imu_mount_pitch params.
-  imu_msg.linear_acceleration.x = imu_R_[0][0]*ax0 + imu_R_[0][1]*ay0 + imu_R_[0][2]*az0;
-  imu_msg.linear_acceleration.y = imu_R_[1][0]*ax0 + imu_R_[1][1]*ay0 + imu_R_[1][2]*az0;
-  imu_msg.linear_acceleration.z = imu_R_[2][0]*ax0 + imu_R_[2][1]*ay0 + imu_R_[2][2]*az0;
-  imu_msg.angular_velocity.x = imu_R_[0][0]*gx0 + imu_R_[0][1]*gy0 + imu_R_[0][2]*gz0;
-  imu_msg.angular_velocity.y = imu_R_[1][0]*gx0 + imu_R_[1][1]*gy0 + imu_R_[1][2]*gz0;
-  imu_msg.angular_velocity.z = imu_R_[2][0]*gx0 + imu_R_[2][1]*gy0 + imu_R_[2][2]*gz0;
+  imu_msg.linear_acceleration.x = ax0;
+  imu_msg.linear_acceleration.y = ay0;
+  imu_msg.linear_acceleration.z = az0;
+  imu_msg.angular_velocity.x = gx0;
+  imu_msg.angular_velocity.y = gy0;
+  imu_msg.angular_velocity.z = gz0;
 
   // Orientation not estimated — signal with -1 in first covariance element
   imu_msg.orientation_covariance[0] = -1.0;
@@ -462,9 +450,9 @@ void Picar2Hardware::dispatch_imu_frame(const uint8_t * p, uint8_t len)
   double mx0 =  get_le16(&p[14]) * 1e-7;   // chip mag Y → robot X
   double my0 = -get_le16(&p[12]) * 1e-7;   // chip mag X → robot -Y
   double mz0 =  get_le16(&p[16]) * 1e-7;
-  mag_msg.magnetic_field.x = imu_R_[0][0]*mx0 + imu_R_[0][1]*my0 + imu_R_[0][2]*mz0;
-  mag_msg.magnetic_field.y = imu_R_[1][0]*mx0 + imu_R_[1][1]*my0 + imu_R_[1][2]*mz0;
-  mag_msg.magnetic_field.z = imu_R_[2][0]*mx0 + imu_R_[2][1]*my0 + imu_R_[2][2]*mz0;
+  mag_msg.magnetic_field.x = mx0;
+  mag_msg.magnetic_field.y = my0;
+  mag_msg.magnetic_field.z = mz0;
 
   mag_pub_->publish(mag_msg);
 }

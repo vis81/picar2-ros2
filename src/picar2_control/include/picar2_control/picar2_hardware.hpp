@@ -109,9 +109,6 @@ private:
   double  lut_us_to_rad(int16_t us_val) const;
   int16_t lut_rad_to_us(double rad_val) const;
 
-  // IMU mounting-tilt correction: R = Ry(pitch) * Rx(roll), precomputed in on_init()
-  double imu_R_[3][3]{};
-
   // IMU publisher node (dedicated, so we can publish from reader thread)
   rclcpp::Node::SharedPtr imu_node_;
   rclcpp::Publisher<sensor_msgs::msg::Imu>::SharedPtr          imu_pub_;
