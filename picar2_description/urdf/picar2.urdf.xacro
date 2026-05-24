@@ -18,9 +18,6 @@
         <plugin>picar2_control/Picar2Hardware</plugin>
         <param name="port">$(arg port)</param>
         <param name="baud">$(arg baud)</param>
-        <!-- IMU mounting tilt (rad) — re-run `imu cal accel` and update if IMU is remounted -->
-        <param name="imu_mount_roll">-0.1648</param>
-        <param name="imu_mount_pitch">-0.0657</param>
         <!-- Steering LUT: delta_us from servo center (ascending) and steer_rad in ROS convention
              (positive = left turn, so positive deg measurement is negated here).
              Measured 2026-05-22 from wheel-angle photo; refine with odom_cal circle test. -->
