@@ -10,6 +10,7 @@ install(DIRECTORY launch config worlds
 install(PROGRAMS
   picar2_bringup/cmd_vel_relay.py
   picar2_bringup/odom_cal.py
+  picar2_bringup/imu_verify.py
   DESTINATION lib/${PROJECT_NAME}
 )
 
