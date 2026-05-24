@@ -1,7 +1,6 @@
 #pragma once
 
 #include <atomic>
-#include <condition_variable>
 #include <cstdint>
 #include <mutex>
 #include <string>
@@ -87,9 +86,8 @@ private:
   std::mutex        write_mutex_;  // serialises all ::write(fd_) calls across threads
 
   // Shared state — protected by state_mutex_
-  std::mutex              state_mutex_;
-  std::condition_variable joint_cv_;
-  bool    joint_ready_{false};
+  std::mutex state_mutex_;
+  bool       joint_ready_{false};
 
   // Staging area — reader thread writes, read() copies to exported state
   double  stg_pos_left_{0.0};

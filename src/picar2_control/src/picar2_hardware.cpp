@@ -25,7 +25,6 @@ static constexpr uint8_t PROTO_START       = 0xAA;
 static constexpr uint8_t PROTO_MAX_LEN     = 32;
 
 static constexpr uint8_t MSG_CMD_VEL       = 0x80;
-static constexpr uint8_t MSG_REQ           = 0x81;
 static constexpr uint8_t MSG_SET_RATE      = 0x82;
 static constexpr uint8_t MSG_TIMESYNC      = 0x84;
 static constexpr uint8_t STREAM_JOINT      = 0x01;
@@ -241,14 +240,17 @@ hardware_interface::CallbackReturn Picar2Hardware::on_activate(
   reader_thread_   = std::thread(&Picar2Hardware::reader_loop,   this);
   timesync_thread_ = std::thread(&Picar2Hardware::timesync_loop, this);
 
-  // Start IMU stream
-  auto hz = static_cast<uint16_t>(imu_rate_hz_);
-  uint8_t rate_payload[3] = {STREAM_IMU,
-    static_cast<uint8_t>(hz & 0xFF), static_cast<uint8_t>(hz >> 8)};
+  // Start streams: JOINT at 2× control rate so read() always finds a fresh frame
   uint8_t rate_frame[10];
-  uart_write(rate_frame, encode_frame(MSG_SET_RATE, rate_payload, 3, rate_frame));
+  uint8_t joint_rate[3] = {STREAM_JOINT, 100, 0};
+  uart_write(rate_frame, encode_frame(MSG_SET_RATE, joint_rate, 3, rate_frame));
 
-  RCLCPP_INFO(get_logger(), "Activated — IMU streaming at %d Hz", imu_rate_hz_);
+  auto hz = static_cast<uint16_t>(imu_rate_hz_);
+  uint8_t imu_rate[3] = {STREAM_IMU,
+    static_cast<uint8_t>(hz & 0xFF), static_cast<uint8_t>(hz >> 8)};
+  uart_write(rate_frame, encode_frame(MSG_SET_RATE, imu_rate, 3, rate_frame));
+
+  RCLCPP_INFO(get_logger(), "Activated — JOINT at 100 Hz, IMU at %d Hz", imu_rate_hz_);
   return hardware_interface::CallbackReturn::SUCCESS;
 }
 
@@ -256,20 +258,21 @@ hardware_interface::CallbackReturn Picar2Hardware::on_activate(
 hardware_interface::CallbackReturn Picar2Hardware::on_deactivate(
   const rclcpp_lifecycle::State & /*previous_state*/)
 {
-  reader_running_.store(false);
-  joint_cv_.notify_all();
-  if (reader_thread_.joinable())   reader_thread_.join();
-  if (timesync_thread_.joinable()) timesync_thread_.join();
-
-  // Stop IMU stream
-  uint8_t stop_payload[3] = {STREAM_IMU, 0, 0};
+  // Stop streams before halting the reader thread
   uint8_t stop_frame[10];
-  uart_write(stop_frame, encode_frame(MSG_SET_RATE, stop_payload, 3, stop_frame));
+  uint8_t stop_joint[3] = {STREAM_JOINT, 0, 0};
+  uint8_t stop_imu[3]   = {STREAM_IMU,   0, 0};
+  uart_write(stop_frame, encode_frame(MSG_SET_RATE, stop_joint, 3, stop_frame));
+  uart_write(stop_frame, encode_frame(MSG_SET_RATE, stop_imu,   3, stop_frame));
 
   // Zero velocity, neutral steer (0 = center)
   uint8_t vel_payload[6] = {0, 0, 0, 0, 0, 0};
   uint8_t frame[16];
   uart_write(frame, encode_frame(MSG_CMD_VEL, vel_payload, sizeof(vel_payload), frame));
+
+  reader_running_.store(false);
+  if (reader_thread_.joinable())   reader_thread_.join();
+  if (timesync_thread_.joinable()) timesync_thread_.join();
 
   ::close(fd_);
   fd_ = -1;
@@ -397,9 +400,8 @@ void Picar2Hardware::dispatch_joint_frame(const uint8_t * p, uint8_t len)
     stg_steer_      = steer;
     stg_pi_time_us_ = pi_us;
     stg_t3_us_      = t3;
-    joint_ready_    = true;
+    joint_ready_ = true;
   }
-  joint_cv_.notify_one();
 }
 
 void Picar2Hardware::dispatch_timesync_resp()
@@ -513,32 +515,18 @@ void Picar2Hardware::process_byte(uint8_t b)
   }
 }
 
-// ── read — send timesync + request, wait for joint frame ─────────────────────
+// ── read — pick up latest JOINT frame pushed by STM32 at 100 Hz ──────────────
 hardware_interface::return_type Picar2Hardware::read(
   const rclcpp::Time & /*time*/, const rclcpp::Duration & /*period*/)
 {
   if (fd_ < 0) return hardware_interface::return_type::OK;
 
-  // Arm flag before sending request (timesync runs independently in timesync_loop)
-  {
-    std::lock_guard<std::mutex> lk(state_mutex_);
-    joint_ready_ = false;
-  }
-
-  // Send MSG_REQ for JOINT
-  uint8_t req_payload[1] = {STREAM_JOINT};
-  uint8_t req_frame[8];
-  uart_write(req_frame, encode_frame(MSG_REQ, req_payload, 1, req_frame));
-
-  // Wait for reader thread to deliver the JOINT frame
-  std::unique_lock<std::mutex> lk(state_mutex_);
-  bool got = joint_cv_.wait_for(lk, std::chrono::milliseconds(5),
-                                 [this] { return joint_ready_; });
-  if (!got) {
-    lk.unlock();
-    static uint32_t joint_to = 0;
-    joint_to++;
-    RCLCPP_WARN_THROTTLE(get_logger(), *get_clock(), 1000, "no JOINT response within 5ms (%u)", joint_to);
+  std::lock_guard<std::mutex> lk(state_mutex_);
+  if (!joint_ready_) {
+    static uint32_t joint_stale = 0;
+    joint_stale++;
+    RCLCPP_WARN_THROTTLE(get_logger(), *get_clock(), 1000,
+      "no new JOINT frame since last read (%u)", joint_stale);
     return hardware_interface::return_type::OK;
   }
 
@@ -548,15 +536,13 @@ hardware_interface::return_type Picar2Hardware::read(
   vel_back_right_ = stg_vel_right_;
   pos_steer_left_  = stg_steer_;
   pos_steer_right_ = stg_steer_;
-  // Front wheels are passive — estimate rotation from rear average for visualization
-  // Left wheel joint axis is mirrored in URDF, so negate its position
+  // Front wheels passive — estimate from rear average; left axis mirrored in URDF
   double avg_rear = (pos_back_left_ + pos_back_right_) * 0.5;
   pos_front_left_wheel_  = -avg_rear;
   pos_front_right_wheel_ =  avg_rear;
-  int64_t pi_us   = stg_pi_time_us_;
-  int64_t t3      = stg_t3_us_;
-  joint_ready_    = false;
-  lk.unlock();
+  int64_t pi_us = stg_pi_time_us_;
+  int64_t t3    = stg_t3_us_;
+  joint_ready_  = false;
 
   if (pi_us != 0) {
     double lag_ms = (t3 - pi_us) * 1e-3;
