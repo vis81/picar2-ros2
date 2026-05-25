@@ -188,7 +188,15 @@ class OdomCalNode(Node):
         with self._lock:
             self._speed = 0.0
             self._angular_z = 0.0
+            if not self._circle_running:
+                return
             self._circle_running = False
+            cb = self.on_circle_done
+            snap = (self._imu_accum, self._odom_accum,
+                    math.hypot(self.x - self.origin_x, self.y - self.origin_y),
+                    self._arc_length)
+        if cb:
+            threading.Thread(target=cb, args=snap, daemon=True).start()
 
     def get_state(self):
         with self._lock:
@@ -437,10 +445,10 @@ class App(tk.Tk):
         imu_deg  = math.degrees(abs(imu_accum))
         odom_deg = math.degrees(abs(odom_accum))
 
-        # turn radius and actual steer angle from arc length
+        # turn radius and actual steer angle from arc length + integrated yaw
         wb = self.node.wheelbase
-        if arc_length > 0.01:
-            R = arc_length / (2 * math.pi)
+        if arc_length > 0.01 and abs(imu_accum) > 0.3:
+            R = arc_length / abs(imu_accum)
             actual_steer_rad = math.atan(wb / R)
             actual_steer_rad = math.copysign(actual_steer_rad, self._last_circle_turn)
             actual_steer_deg = math.degrees(actual_steer_rad)
