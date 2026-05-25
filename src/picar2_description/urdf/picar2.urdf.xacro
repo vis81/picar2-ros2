@@ -21,8 +21,8 @@
         <!-- Steering LUT: delta_us from servo center (ascending) and steer_rad in ROS convention
              (positive = left turn, so positive deg measurement is negated here).
              Measured 2026-05-22 from wheel-angle photo; refine with odom_cal circle test. -->
-        <param name="steer_lut_us">-595 -347 -298 -149 0 136 272 408 545</param>
-        <param name="steer_lut_rad">0.6756 0.4224 0.3368 0.1728 0.0 -0.1239 -0.2443 -0.4014 -0.6109</param>
+        <param name="steer_lut_us">-595 -454 -410 -364 -329 -299 -271 -252 -202 -151 -121 -101 128 154	193	257	308	354	433	464	493	545</param>
+        <param name="steer_lut_rad">0.6756 0.5308 0.4578 0.4058 0.3513 0.3176 0.2790 0.2443 0.1994 0.1392 0.1062 0.0668 -0.1276 -0.1646 -0.2049 -0.2829	-0.3129	-0.3681	-0.4680	-0.4844	-0.5078	-0.6109</param>
       </xacro:unless>
     </hardware>
 
