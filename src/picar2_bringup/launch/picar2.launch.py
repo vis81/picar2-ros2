@@ -31,6 +31,7 @@ def generate_launch_description():
             'xacro ', str(desc_share / 'urdf' / 'picar2.urdf.xacro'),
             ' port:=', LaunchConfiguration('port'),
             ' baud:=', LaunchConfiguration('baud'),
+            ' lidar:=', LaunchConfiguration('lidar'),
         ]),
         value_type=str)
 
