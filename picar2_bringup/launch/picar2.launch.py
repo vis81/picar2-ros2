@@ -4,8 +4,9 @@ from ament_index_python.packages import get_package_share_directory
 from launch import LaunchDescription
 from launch.actions import DeclareLaunchArgument
 from launch.conditions import IfCondition
-from launch.substitutions import Command, LaunchConfiguration
-from launch_ros.actions import Node
+from launch.substitutions import Command, EqualsSubstitution, LaunchConfiguration
+from launch_ros.actions import ComposableNodeContainer, Node
+from launch_ros.descriptions import ComposableNode
 from launch_ros.parameter_descriptions import ParameterValue
 
 
@@ -15,8 +16,9 @@ def generate_launch_description():
 
     port_arg  = DeclareLaunchArgument('port',  default_value='/dev/ttyYahboom0')
     baud_arg  = DeclareLaunchArgument('baud',  default_value='460800')
-    lidar_arg = DeclareLaunchArgument('lidar', default_value='true',
-                                      description='Launch the LiDAR node')
+    lidar_arg = DeclareLaunchArgument(
+        'lidar', default_value='lds02rr',
+        description='LiDAR model: lds02rr | ld19 | ld07 | none')
     use_mag_arg = DeclareLaunchArgument('use_mag', default_value='false',
                                         description='Enable magnetometer fusion in Madgwick filter')
     calib_arg = DeclareLaunchArgument(
@@ -33,6 +35,9 @@ def generate_launch_description():
         value_type=str)
 
     controllers_yaml = str(bringup_share / 'config' / 'controllers.yaml')
+
+    def lidar_is(model):
+        return IfCondition(EqualsSubstitution(LaunchConfiguration('lidar'), model))
 
     # controller_manager loads the hardware plugin and runs the control loop
     ros2_control_node = Node(
@@ -109,16 +114,65 @@ def generate_launch_description():
         ],
     )
 
-    lidar_node = Node(
+    # ── LiDAR: lds02rr (Neato XV-11 / LDS02RR, GPIO motor PWM) ──────────────
+    lidar_lds02rr = Node(
         package='picar2_lidar',
         executable='lidar_node',
         name='lidar_node',
         output='screen',
-        condition=IfCondition(LaunchConfiguration('lidar')),
+        condition=lidar_is('lds02rr'),
         parameters=[{
             'target_rpm':   300.0,
             'angle_offset': -2.77,
         }],
+    )
+
+    # ── LiDAR: ld19 (LDRobot LD19, lifecycle composable node) ────────────────
+    # Uses picar2_bringup/config/lidar_ld19.yaml (serial port: /dev/ldlidar).
+    # Skips ldlidar_node's own robot_state_publisher — picar2 already has one.
+    lidar_ld19_config = str(bringup_share / 'config' / 'lidar_ld19.yaml')
+
+    lidar_ld19_container = ComposableNodeContainer(
+        name='lidar_container',
+        namespace='',
+        package='rclcpp_components',
+        executable='component_container_isolated',
+        composable_node_descriptions=[
+            ComposableNode(
+                package='ldlidar_component',
+                plugin='ldlidar::LdLidarComponent',
+                name='lidar_node',
+                parameters=[lidar_ld19_config],
+                extra_arguments=[{'use_intra_process_comms': True}],
+            ),
+        ],
+        output='screen',
+        condition=lidar_is('ld19'),
+    )
+
+    lidar_ld19_lc_mgr = Node(
+        package='nav2_lifecycle_manager',
+        executable='lifecycle_manager',
+        name='lidar_lifecycle_manager',
+        output='screen',
+        condition=lidar_is('ld19'),
+        parameters=[{
+            'autostart':  True,
+            'node_names': ['lidar_node'],
+        }],
+    )
+
+    # ── LiDAR: ld07 (LDRobot LD07 structured-light, 45° FOV) ─────────────────
+    # Serial port default from ld07.yaml (/dev/ttyUSB0); override via that file.
+    lidar_ld07 = Node(
+        package='ldrobot_ld07',
+        executable='ldrobot_ld07_node',
+        name='lidar_node',
+        output='screen',
+        condition=lidar_is('ld07'),
+        parameters=[
+            str(Path(get_package_share_directory('ldrobot_ld07')) / 'params' / 'ld07.yaml')
+        ],
     )
 
     return LaunchDescription([
@@ -135,5 +189,8 @@ def generate_launch_description():
         imu_calib,
         imu_filter,
         ekf_node,
-        lidar_node,
+        lidar_lds02rr,
+        lidar_ld19_container,
+        lidar_ld19_lc_mgr,
+        lidar_ld07,
     ])
