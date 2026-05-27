@@ -4,6 +4,8 @@
   <xacro:arg name="port"    default="/dev/ttyYahboom0"/>
   <xacro:arg name="baud"    default="460800"/>
   <xacro:arg name="use_sim" default="false"/>
+  <xacro:arg name="lidar"   default="lds02rr"/>
+  <xacro:property name="lidar_model" value="$(arg lidar)"/>
 
   <!-- ═══════════════════════════════════════════════════
        ros2_control block — joint names match URDF joints
@@ -221,11 +223,20 @@
       <mass value="0"/>
       <inertia ixx="0" ixy="0" ixz="0" iyy="0" iyz="0" izz="0"/>
     </inertial>
-    <visual>
-      <origin xyz="0 0 0" rpy="0 0 0"/>
-      <geometry><mesh filename="package://picar2_description/meshes/laser_link.STL"/></geometry>
-      <material name=""><color rgba="1 1 1 1"/></material>
-    </visual>
+    <xacro:if value="${lidar_model == 'ld19'}">
+      <visual>
+        <origin xyz="0 0 -0.047" rpy="0 0 -1.5708"/>
+        <geometry><mesh filename="package://picar2_description/meshes/ld19.STL" scale="0.001 0.001 0.001"/></geometry>
+        <material name=""><color rgba="0.2 0.2 0.2 1"/></material>
+      </visual>
+    </xacro:if>
+    <xacro:unless value="${lidar_model == 'ld19'}">
+      <visual>
+        <origin xyz="0 0 0" rpy="0 0 0"/>
+        <geometry><mesh filename="package://picar2_description/meshes/laser_link.STL"/></geometry>
+        <material name=""><color rgba="1 1 1 1"/></material>
+      </visual>
+    </xacro:unless>
     <collision>
       <origin xyz="0 0 0" rpy="0 0 0"/>
       <geometry><box size="0.07 0.07 0.05"/></geometry>
