@@ -15,5 +15,4 @@
       range_min: 0.03
       range_max: 15.0
       enable_angle_crop: false
-      angle_crop_min: 0.0
-      angle_crop_max: 0.0
+      topic_root: ''
