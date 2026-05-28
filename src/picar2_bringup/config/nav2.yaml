@@ -160,9 +160,9 @@ local_costmap:
           data_type: LaserScan
           marking: true
           clearing: true
-          obstacle_max_range: 0.38
+          obstacle_max_range: 0.15
           obstacle_min_range: 0.005
-          raytrace_max_range: 0.40
+          raytrace_max_range: 0.17
           raytrace_min_range: 0.0
           max_obstacle_height: 2.0
       inflation_layer:
@@ -204,9 +204,9 @@ global_costmap:
           data_type: LaserScan
           marking: true
           clearing: true
-          obstacle_max_range: 0.38
+          obstacle_max_range: 0.15
           obstacle_min_range: 0.005
-          raytrace_max_range: 0.40
+          raytrace_max_range: 0.17
           raytrace_min_range: 0.0
           max_obstacle_height: 2.0
       inflation_layer:
