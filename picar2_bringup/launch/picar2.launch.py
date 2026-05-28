@@ -21,6 +21,8 @@ def generate_launch_description():
         description='LiDAR model: lds02rr | ld19 | none')
     use_mag_arg = DeclareLaunchArgument('use_mag', default_value='false',
                                         description='Enable magnetometer fusion in Madgwick filter')
+    use_ld07_arg = DeclareLaunchArgument('use_ld07', default_value='true',
+                                         description='Enable LD07 front depth sensor')
     calib_arg = DeclareLaunchArgument(
         'calib_file',
         default_value=str(bringup_share / 'config' / 'imu_calib.yaml'),
@@ -163,12 +165,13 @@ def generate_launch_description():
         }],
     )
 
-    # ── LD07 structured-light depth sensor — always on, front of car ─────────
+    # ── LD07 structured-light depth sensor — front of car ────────────────────
     # Publishes /ld07/scan in ld07_link frame. Serial port: /dev/ld07 (udev).
     ld07_node = Node(
         package='ldrobot_ld07',
         executable='ldrobot_ld07_node',
         output='screen',
+        condition=IfCondition(LaunchConfiguration('use_ld07')),
         parameters=[
             str(Path(get_package_share_directory('ldrobot_ld07')) / 'params' / 'ld07.yaml')
         ],
@@ -179,6 +182,7 @@ def generate_launch_description():
         baud_arg,
         lidar_arg,
         use_mag_arg,
+        use_ld07_arg,
         calib_arg,
         ros2_control_node,
         robot_state_publisher,
