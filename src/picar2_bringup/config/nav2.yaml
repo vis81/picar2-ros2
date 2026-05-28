@@ -167,7 +167,7 @@ local_costmap:
           max_obstacle_height: 2.0
       inflation_layer:
         plugin: nav2_costmap_2d::InflationLayer
-        cost_scaling_factor: 2.0
+        cost_scaling_factor: 5.0
         inflation_radius: 0.17
       always_send_full_costmap: true
 
@@ -211,6 +211,6 @@ global_costmap:
           max_obstacle_height: 2.0
       inflation_layer:
         plugin: nav2_costmap_2d::InflationLayer
-        cost_scaling_factor: 2.0
+        cost_scaling_factor: 5.0
         inflation_radius: 0.17
       always_send_full_costmap: true
