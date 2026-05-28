@@ -144,7 +144,7 @@ local_costmap:
       obstacle_layer:
         plugin: nav2_costmap_2d::ObstacleLayer
         enabled: true
-        observation_sources: scan
+        observation_sources: scan ld07
         scan:
           topic: /scan
           data_type: LaserScan
@@ -153,6 +153,16 @@ local_costmap:
           obstacle_max_range: 4.5
           obstacle_min_range: 0.0
           raytrace_max_range: 5.0
+          raytrace_min_range: 0.0
+          max_obstacle_height: 2.0
+        ld07:
+          topic: /ld07/scan
+          data_type: LaserScan
+          marking: true
+          clearing: true
+          obstacle_max_range: 0.38
+          obstacle_min_range: 0.005
+          raytrace_max_range: 0.40
           raytrace_min_range: 0.0
           max_obstacle_height: 2.0
       inflation_layer:
@@ -178,7 +188,7 @@ global_costmap:
       obstacle_layer:
         plugin: nav2_costmap_2d::ObstacleLayer
         enabled: true
-        observation_sources: scan
+        observation_sources: scan ld07
         scan:
           topic: /scan
           data_type: LaserScan
@@ -187,6 +197,16 @@ global_costmap:
           obstacle_max_range: 4.5
           obstacle_min_range: 0.0
           raytrace_max_range: 5.0
+          raytrace_min_range: 0.0
+          max_obstacle_height: 2.0
+        ld07:
+          topic: /ld07/scan
+          data_type: LaserScan
+          marking: true
+          clearing: true
+          obstacle_max_range: 0.38
+          obstacle_min_range: 0.005
+          raytrace_max_range: 0.40
           raytrace_min_range: 0.0
           max_obstacle_height: 2.0
       inflation_layer:
