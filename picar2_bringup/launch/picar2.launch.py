@@ -18,7 +18,7 @@ def generate_launch_description():
     baud_arg  = DeclareLaunchArgument('baud',  default_value='460800')
     lidar_arg = DeclareLaunchArgument(
         'lidar', default_value='lds02rr',
-        description='LiDAR model: lds02rr | ld19 | ld07 | none')
+        description='LiDAR model: lds02rr | ld19 | none')
     use_mag_arg = DeclareLaunchArgument('use_mag', default_value='false',
                                         description='Enable magnetometer fusion in Madgwick filter')
     calib_arg = DeclareLaunchArgument(
@@ -163,14 +163,12 @@ def generate_launch_description():
         }],
     )
 
-    # ── LiDAR: ld07 (LDRobot LD07 structured-light, 45° FOV) ─────────────────
-    # Serial port default from ld07.yaml (/dev/ttyUSB0); override via that file.
-    lidar_ld07 = Node(
+    # ── LD07 structured-light depth sensor — always on, front of car ─────────
+    # Publishes /ld07/scan in ld07_link frame. Serial port: /dev/ld07 (udev).
+    ld07_node = Node(
         package='ldrobot_ld07',
         executable='ldrobot_ld07_node',
-        name='lidar_node',
         output='screen',
-        condition=lidar_is('ld07'),
         parameters=[
             str(Path(get_package_share_directory('ldrobot_ld07')) / 'params' / 'ld07.yaml')
         ],
@@ -193,5 +191,5 @@ def generate_launch_description():
         lidar_lds02rr,
         lidar_ld19_container,
         lidar_ld19_lc_mgr,
-        lidar_ld07,
+        ld07_node,
     ])

@@ -243,6 +243,27 @@
     </collision>
   </link>
 
+  <!-- LD07 structured-light depth sensor — front centre, fixed mount -->
+  <link name="ld07_link">
+    <inertial>
+      <origin xyz="0 0 0" rpy="0 0 0"/>
+      <mass value="0"/>
+      <inertia ixx="0" ixy="0" ixz="0" iyy="0" iyz="0" izz="0"/>
+    </inertial>
+    <visual>
+      <origin xyz="0 0 0" rpy="0 0 0"/>
+      <geometry>
+        <mesh filename="package://picar2_description/meshes/ld07_ros_model.stl"
+              scale="0.001 0.001 0.001"/>
+      </geometry>
+      <material name=""><color rgba="0.15 0.15 0.15 1"/></material>
+    </visual>
+    <collision>
+      <origin xyz="0.015 0 0" rpy="0 0 0"/>
+      <geometry><box size="0.03 0.03 0.015"/></geometry>
+    </collision>
+  </link>
+
   <!-- ═══════════════════════════════════════════════════
        Joints
        ═══════════════════════════════════════════════════ -->
@@ -316,6 +337,13 @@
     <origin xyz="0.012548 0 0.147" rpy="0 0 0"/>
     <parent link="base_link"/>
     <child  link="laser_link"/>
+  </joint>
+
+  <joint name="ld07_joint" type="fixed">
+    <!-- Front centre, 40 mm above base_link. Tune xyz once mounted. -->
+    <origin xyz="0.172 0 0.034" rpy="0 0 0"/>
+    <parent link="base_link"/>
+    <child  link="ld07_link"/>
   </joint>
 
   <!-- ═══════════════════════════════════════════════════
