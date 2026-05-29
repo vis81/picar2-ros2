@@ -5,7 +5,8 @@
   <xacro:arg name="baud"    default="460800"/>
   <xacro:arg name="use_sim" default="false"/>
   <xacro:arg name="lidar"   default="lds02rr"/>
-  <xacro:property name="lidar_model" value="$(arg lidar)"/>
+  <xacro:property name="lidar_model"    value="$(arg lidar)"/>
+  <xacro:property name="ld07_tilt_rad"  value="0.2793"/>  <!-- 16° mount angle -->
 
   <!-- ═══════════════════════════════════════════════════
        ros2_control block — joint names match URDF joints
@@ -251,7 +252,7 @@
       <inertia ixx="0" ixy="0" ixz="0" iyy="0" iyz="0" izz="0"/>
     </inertial>
     <visual>
-      <origin xyz="0 0 0" rpy="0 0 0"/>
+      <origin xyz="0 0 0" rpy="0 -${ld07_tilt_rad} 0"/>
       <geometry>
         <mesh filename="package://picar2_description/meshes/ld07_ros_model.stl"
               scale="0.001 0.001 0.001"/>
@@ -340,8 +341,7 @@
   </joint>
 
   <joint name="ld07_joint" type="fixed">
-    <!-- Front centre, 40 mm above base_link. Tune xyz once mounted. -->
-    <origin xyz="0.172 0 0.034" rpy="0 0 0"/>
+    <origin xyz="0.172 0 0.034" rpy="0 ${ld07_tilt_rad} 0"/>
     <parent link="base_link"/>
     <child  link="ld07_link"/>
   </joint>
@@ -401,13 +401,13 @@
           <horizontal>
             <samples>160</samples>
             <resolution>1</resolution>
-            <min_angle>-0.7854</min_angle>
+            <min_angle>-0.7330</min_angle>
             <max_angle>0.7854</max_angle>
           </horizontal>
         </scan>
         <range>
           <min>0.005</min>
-          <max>0.170</max>
+          <max>0.400</max>
           <resolution>0.001</resolution>
         </range>
         <noise type="gaussian">
