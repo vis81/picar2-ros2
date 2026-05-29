@@ -1,0 +1,17 @@
+teleop_twist_joy_node:
+  ros__parameters:
+    require_enable_button: false
+
+    axis_linear:
+      x: 1                 # right stick up/down
+    scale_linear:
+      x: -1.0              # invert: stick up (axis negative) → forward (positive m/s)
+    scale_linear_turbo:
+      x: -1.5
+
+    axis_angular:
+      yaw: 0               # right stick left/right
+    scale_angular:
+      yaw: 1.5
+    scale_angular_turbo:
+      yaw: 1.5
