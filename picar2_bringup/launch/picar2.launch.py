@@ -127,6 +127,7 @@ def generate_launch_description():
         parameters=[{
             'target_rpm':   300.0,
             'angle_offset': -2.77,
+            'signal_min':   20,
         }],
     )
 
