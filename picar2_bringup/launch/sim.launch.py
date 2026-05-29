@@ -49,7 +49,7 @@ def generate_launch_description():
     robot_state_publisher = Node(
         package='robot_state_publisher',
         executable='robot_state_publisher',
-        parameters=[{'robot_description': robot_description}],
+        parameters=[{'robot_description': robot_description, 'use_sim_time': True}],
     )
 
     jsb_spawner = Node(
@@ -69,6 +69,7 @@ def generate_launch_description():
         executable='cmd_vel_relay.py',
         name='cmd_vel_relay',
         output='screen',
+        parameters=[{'use_sim_time': True}],
     )
 
     imu_filter = Node(
@@ -78,6 +79,7 @@ def generate_launch_description():
             'use_mag': False,
             'publish_tf': False,
             'world_frame': 'enu',
+            'use_sim_time': True,
         }],
         remappings=[
             ('/imu/data_raw', '/imu/data_raw'),
@@ -87,7 +89,7 @@ def generate_launch_description():
     ekf_node = Node(
         package='robot_localization',
         executable='ekf_node',
-        parameters=[str(bringup_share / 'config' / 'ekf.yaml')],
+        parameters=[str(bringup_share / 'config' / 'ekf.yaml'), {'use_sim_time': True}],
         remappings=[('/odometry/filtered', '/odom')],
     )
 
