@@ -19,7 +19,7 @@ def generate_launch_description():
                 '-configuration_directory', str(bringup_share / 'config'),
                 '-configuration_basename', 'cartographer.lua',
             ],
-            remappings=[('/imu', '/imu/data')],
+            remappings=[('/imu', '/imu/data'), ('/scan', '/lidar_node/scan')],
         ),
         Node(
             package='cartographer_ros',

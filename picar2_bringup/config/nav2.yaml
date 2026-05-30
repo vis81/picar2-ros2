@@ -145,7 +145,7 @@ local_costmap:
         enabled: true
         observation_sources: scan ld07
         scan:
-          topic: /scan
+          topic: /lidar_node/scan
           data_type: LaserScan
           marking: true
           clearing: true
@@ -190,7 +190,7 @@ global_costmap:
         enabled: true
         observation_sources: scan ld07
         scan:
-          topic: /scan
+          topic: /lidar_node/scan
           data_type: LaserScan
           marking: true
           clearing: true

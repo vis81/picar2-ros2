@@ -169,6 +169,7 @@ def generate_launch_description():
             'angle_offset': -2.77,
             'signal_min':   20,
         }],
+        remappings=[('/scan', '/lidar_node/scan')],
     )
 
     # ── LiDAR: ld19 (LDRobot LD19, lifecycle composable node) ────────────────
