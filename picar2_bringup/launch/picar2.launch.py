@@ -3,7 +3,7 @@ from pathlib import Path
 from ament_index_python.packages import get_package_share_directory
 from launch import LaunchDescription
 from launch.actions import DeclareLaunchArgument
-from launch.conditions import IfCondition
+from launch.conditions import IfCondition, UnlessCondition
 from launch.substitutions import Command, EqualsSubstitution, LaunchConfiguration
 from launch_ros.actions import ComposableNodeContainer, Node
 from launch_ros.descriptions import ComposableNode
@@ -83,7 +83,19 @@ def generate_launch_description():
     ekf_node = Node(
         package='robot_localization',
         executable='ekf_node',
+        condition=UnlessCondition(LaunchConfiguration('use_mag')),
         parameters=[str(bringup_share / 'config' / 'ekf.yaml')],
+        remappings=[('/odometry/filtered', '/odom')],
+    )
+
+    ekf_node_mag = Node(
+        package='robot_localization',
+        executable='ekf_node',
+        condition=IfCondition(LaunchConfiguration('use_mag')),
+        parameters=[
+            str(bringup_share / 'config' / 'ekf.yaml'),
+            str(bringup_share / 'config' / 'ekf_mag.yaml'),
+        ],
         remappings=[('/odometry/filtered', '/odom')],
     )
 
@@ -113,8 +125,36 @@ def generate_launch_description():
         }],
         remappings=[
             ('/imu/data_raw', '/imu/data_corrected'),
-            ('/imu/mag',      '/imu/mag'),
+            ('/imu/mag',      '/imu/mag_unbiased'),
         ],
+    )
+
+    # ── Magnetometer bias calibration pipeline ───────────────────────────────
+    # Only active when use_mag:=true. Loads hard-iron bias from calibration
+    # file, subtracts it from /imu/mag and republishes as /imu/mag_unbiased.
+    # Calibrate with: ros2 service call /calibrate_magnetometer std_srvs/srv/Trigger {}
+    mag_calib_file = str(bringup_share / 'config' / 'magnetometer_calib.yaml')
+
+    mag_bias_observer = Node(
+        package='magnetometer_pipeline',
+        executable='magnetometer_bias_observer.py',
+        name='mag_bias_observer',
+        output='screen',
+        condition=IfCondition(LaunchConfiguration('use_mag')),
+        parameters=[{
+            '2d_mode': True,
+            'calibration_file_path': mag_calib_file,
+            'load_from_file': True,
+            'save_to_file': True,
+        }],
+    )
+
+    mag_bias_remover = Node(
+        package='magnetometer_pipeline',
+        executable='magnetometer_bias_remover_node',
+        name='magnetometer_bias_remover',
+        output='screen',
+        condition=IfCondition(LaunchConfiguration('use_mag')),
     )
 
     # ── LiDAR: lds02rr (Neato XV-11 / LDS02RR, GPIO motor PWM) ──────────────
@@ -191,8 +231,11 @@ def generate_launch_description():
         ackermann_spawner,
         cmd_vel_relay,
         imu_calib,
+        mag_bias_observer,
+        mag_bias_remover,
         imu_filter,
         ekf_node,
+        ekf_node_mag,
         lidar_lds02rr,
         lidar_ld19_container,
         lidar_ld19_lc_mgr,
