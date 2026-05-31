@@ -137,8 +137,8 @@ local_costmap:
       width: 3
       height: 3
       resolution: 0.05
-      # Actual chassis 0.24 × 0.17 m — polygon avoids over-inflating in narrow passages
-      footprint: "[[-0.12, -0.09], [-0.12, 0.09], [0.12, 0.09], [0.12, -0.09]]"
+      # base_footprint is at the rear axle; chassis extends ~40 mm behind it
+      footprint: "[[-0.04, -0.09], [-0.04, 0.09], [0.24, 0.09], [0.24, -0.09]]"
       plugins: [obstacle_layer, inflation_layer]
       obstacle_layer:
         plugin: nav2_costmap_2d::ObstacleLayer
@@ -180,7 +180,7 @@ global_costmap:
       robot_base_frame: base_footprint
       resolution: 0.05
       track_unknown_space: true
-      footprint: "[[-0.12, -0.09], [-0.12, 0.09], [0.12, 0.09], [0.12, -0.09]]"
+      footprint: "[[-0.04, -0.09], [-0.04, 0.09], [0.24, 0.09], [0.24, -0.09]]"
       plugins: [static_layer, obstacle_layer, inflation_layer]
       static_layer:
         plugin: nav2_costmap_2d::StaticLayer
