@@ -1,9 +1,0 @@
-ekf_filter_node:
-  ros__parameters:
-    # Overrides ekf.yaml when use_mag:=true — adds absolute yaw from
-    # magnetometer-corrected Madgwick orientation.
-    imu0_config: [false, false, false,
-                  false, false, true,
-                  false, false, false,
-                  false, false, true,
-                  false, false, false]
