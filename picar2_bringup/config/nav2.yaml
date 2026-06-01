@@ -143,7 +143,7 @@ local_costmap:
       obstacle_layer:
         plugin: nav2_costmap_2d::ObstacleLayer
         enabled: true
-        observation_sources: scan ld07
+        observation_sources: scan sen0628
         scan:
           topic: /lidar_node/scan
           data_type: LaserScan
@@ -154,16 +154,16 @@ local_costmap:
           raytrace_max_range: 5.0
           raytrace_min_range: 0.0
           max_obstacle_height: 2.0
-        ld07:
-          topic: /ld07/scan
-          data_type: LaserScan
+        sen0628:
+          topic: /sen0628/pointcloud
+          data_type: PointCloud2
           marking: true
           clearing: true
           obstacle_max_range: 0.40
           obstacle_min_range: 0.005
           raytrace_max_range: 0.40
           raytrace_min_range: 0.0
-          min_obstacle_height: 0.02   # rejects floor returns (z≈0 after TF tilt)
+          min_obstacle_height: 0.02   # rejects floor returns after TF tilt
           max_obstacle_height: 2.0
       inflation_layer:
         plugin: nav2_costmap_2d::InflationLayer
@@ -188,7 +188,7 @@ global_costmap:
       obstacle_layer:
         plugin: nav2_costmap_2d::ObstacleLayer
         enabled: true
-        observation_sources: scan ld07
+        observation_sources: scan sen0628
         scan:
           topic: /lidar_node/scan
           data_type: LaserScan
@@ -199,16 +199,16 @@ global_costmap:
           raytrace_max_range: 5.0
           raytrace_min_range: 0.0
           max_obstacle_height: 2.0
-        ld07:
-          topic: /ld07/scan
-          data_type: LaserScan
+        sen0628:
+          topic: /sen0628/pointcloud
+          data_type: PointCloud2
           marking: true
           clearing: true
           obstacle_max_range: 0.40
           obstacle_min_range: 0.005
           raytrace_max_range: 0.40
           raytrace_min_range: 0.0
-          min_obstacle_height: 0.02   # rejects floor returns (z≈0 after TF tilt)
+          min_obstacle_height: 0.02   # rejects floor returns after TF tilt
           max_obstacle_height: 2.0
       inflation_layer:
         plugin: nav2_costmap_2d::InflationLayer

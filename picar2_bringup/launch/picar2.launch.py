@@ -2,12 +2,16 @@ from pathlib import Path
 
 from ament_index_python.packages import get_package_share_directory
 from launch import LaunchDescription
-from launch.actions import DeclareLaunchArgument
+from launch.actions import DeclareLaunchArgument, EmitEvent, RegisterEventHandler
 from launch.conditions import IfCondition
+from launch.events import matches_action
 from launch.substitutions import Command, EqualsSubstitution, LaunchConfiguration
-from launch_ros.actions import ComposableNodeContainer, Node
+from launch_ros.actions import ComposableNodeContainer, LifecycleNode, Node
 from launch_ros.descriptions import ComposableNode
+from launch_ros.event_handlers import OnStateTransition
+from launch_ros.events.lifecycle import ChangeState
 from launch_ros.parameter_descriptions import ParameterValue
+from lifecycle_msgs.msg import Transition
 
 
 def generate_launch_description():
@@ -21,8 +25,12 @@ def generate_launch_description():
         description='LiDAR model: lds02rr | ld19 | none')
     use_mag_arg = DeclareLaunchArgument('use_mag', default_value='false',
                                         description='Enable magnetometer fusion in Madgwick filter')
-    use_ld07_arg = DeclareLaunchArgument('use_ld07', default_value='true',
-                                         description='Enable LD07 front depth sensor')
+    use_ld07_arg = DeclareLaunchArgument('use_ld07', default_value='false',
+                                         description='Enable LD07 front depth sensor (replaced by SEN0628)')
+    use_sen0628_arg = DeclareLaunchArgument('use_sen0628', default_value='true',
+                                             description='Enable SEN0628 matrix ToF front sensor')
+    sen0628_port_arg = DeclareLaunchArgument('sen0628_port', default_value='/dev/sen0628',
+                                              description='Serial port for SEN0628')
     calib_arg = DeclareLaunchArgument(
         'calib_file',
         default_value=str(bringup_share / 'config' / 'imu_calib.yaml'),
@@ -195,6 +203,32 @@ def generate_launch_description():
         }],
     )
 
+    # ── SEN0628 matrix ToF sensor — front of car (replaces LD07) ────────────
+    # Publishes /sen0628/pointcloud in sen0628_link frame.
+    sen0628_node = LifecycleNode(
+        package='tof_imager_ros',
+        executable='tof_imager_publisher',
+        name='tof_imager',
+        namespace='',
+        output='screen',
+        condition=IfCondition(LaunchConfiguration('use_sen0628')),
+        parameters=[
+            str(Path(get_package_share_directory('tof_imager_ros')) / 'config' / 'sensor_params.yaml'),
+            {'frame_id': 'sen0628_link',
+             'serial_port': LaunchConfiguration('sen0628_port')},
+        ],
+        remappings=[('pointcloud', '/sen0628/pointcloud')],
+    )
+    sen0628_configure = EmitEvent(event=ChangeState(
+        lifecycle_node_matcher=matches_action(sen0628_node),
+        transition_id=Transition.TRANSITION_CONFIGURE))
+    sen0628_activate = RegisterEventHandler(OnStateTransition(
+        target_lifecycle_node=sen0628_node,
+        goal_state='inactive',
+        entities=[EmitEvent(event=ChangeState(
+            lifecycle_node_matcher=matches_action(sen0628_node),
+            transition_id=Transition.TRANSITION_ACTIVATE))]))
+
     # ── LD07 structured-light depth sensor — front of car ────────────────────
     # Publishes /ld07/scan in ld07_link frame. Serial port: /dev/ld07 (udev).
     ld07_node = Node(
@@ -213,6 +247,8 @@ def generate_launch_description():
         lidar_arg,
         use_mag_arg,
         use_ld07_arg,
+        use_sen0628_arg,
+        sen0628_port_arg,
         calib_arg,
         ros2_control_node,
         robot_state_publisher,
@@ -227,5 +263,8 @@ def generate_launch_description():
         lidar_lds02rr,
         lidar_ld19_container,
         lidar_ld19_lc_mgr,
+        sen0628_node,
+        sen0628_configure,
+        sen0628_activate,
         ld07_node,
     ])

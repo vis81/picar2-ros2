@@ -346,6 +346,14 @@
     <child  link="ld07_link"/>
   </joint>
 
+  <!-- SEN0628 matrix ToF sensor — same mount position as LD07, no tilt -->
+  <link name="sen0628_link"/>
+  <joint name="sen0628_joint" type="fixed">
+    <origin xyz="0.172 0 0.034" rpy="0 0 0"/>
+    <parent link="base_link"/>
+    <child  link="sen0628_link"/>
+  </joint>
+
   <!-- ═══════════════════════════════════════════════════
        Gazebo properties (sim only)
        ═══════════════════════════════════════════════════ -->
