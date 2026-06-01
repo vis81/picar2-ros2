@@ -349,7 +349,7 @@
   <!-- SEN0628 matrix ToF sensor — same mount position as LD07, no tilt -->
   <link name="sen0628_link"/>
   <joint name="sen0628_joint" type="fixed">
-    <origin xyz="0.172 0 0.034" rpy="0 0 0"/>
+    <origin xyz="0.172 0 0.034" rpy="${pi} 0 0"/>
     <parent link="base_link"/>
     <child  link="sen0628_link"/>
   </joint>
@@ -409,6 +409,32 @@
         <y><noise type="gaussian"><mean>0.0</mean><stddev>0.0001</stddev></noise></y>
         <z><noise type="gaussian"><mean>0.0</mean><stddev>0.0001</stddev></noise></z>
       </magnetometer>
+    </sensor>
+  </gazebo>
+
+  <!-- SEN0628 8×8 matrix ToF — depth_camera, 45°×45° FOV, 4 m range -->
+  <gazebo reference="sen0628_link">
+    <sensor name="sen0628" type="depth_camera">
+      <always_on>1</always_on>
+      <update_rate>10</update_rate>
+      <topic>/model/picar2/sen0628</topic>
+      <gz_frame_id>sen0628_link</gz_frame_id>
+      <camera>
+        <horizontal_fov>0.7854</horizontal_fov>
+        <image>
+          <width>8</width>
+          <height>8</height>
+        </image>
+        <clip>
+          <near>0.005</near>
+          <far>4.0</far>
+        </clip>
+        <noise>
+          <type>gaussian</type>
+          <mean>0.0</mean>
+          <stddev>0.005</stddev>
+        </noise>
+      </camera>
     </sensor>
   </gazebo>
 

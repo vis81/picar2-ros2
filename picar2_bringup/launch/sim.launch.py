@@ -19,6 +19,10 @@ def generate_launch_description():
 
     use_mag_arg = DeclareLaunchArgument('use_mag', default_value='false',
                                         description='Enable magnetometer fusion in Madgwick filter')
+    use_ld07_arg = DeclareLaunchArgument('use_ld07', default_value='false',
+                                         description='Enable LD07 scan in costmap (sensor always simulated)')
+    use_sen0628_arg = DeclareLaunchArgument('use_sen0628', default_value='true',
+                                             description='Enable SEN0628 pointcloud in costmap (sensor always simulated)')
 
     robot_description = ParameterValue(
         Command([
@@ -136,6 +140,8 @@ def generate_launch_description():
 
     return LaunchDescription([
         use_mag_arg,
+        use_ld07_arg,
+        use_sen0628_arg,
         gazebo,
         robot_state_publisher,
         spawn_robot,

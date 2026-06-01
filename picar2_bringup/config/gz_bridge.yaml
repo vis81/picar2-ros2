@@ -16,6 +16,12 @@
   gz_type_name: gz.msgs.LaserScan
   direction: GZ_TO_ROS
 
+- ros_topic_name: /sen0628/pointcloud
+  gz_topic_name: /model/picar2/sen0628/points
+  ros_type_name: sensor_msgs/msg/PointCloud2
+  gz_type_name: gz.msgs.PointCloudPacked
+  direction: GZ_TO_ROS
+
 - ros_topic_name: /imu/mag
   gz_topic_name: /model/picar2/mag
   ros_type_name: sensor_msgs/msg/MagneticField
