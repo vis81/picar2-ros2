@@ -15,8 +15,16 @@ def generate_launch_description():
     bringup_share = Path(get_package_share_directory('picar2_bringup'))
     ros_gz_sim_share = Path(get_package_share_directory('ros_gz_sim'))
 
-    world_file = str(bringup_share / 'worlds' / 'room.sdf')
+    default_world = str(bringup_share / 'worlds' / 'room.sdf')
 
+    world_arg = DeclareLaunchArgument('world', default_value=default_world,
+                                      description='Full path to Gazebo world file')
+    spawn_x_arg = DeclareLaunchArgument('spawn_x', default_value='0',
+                                        description='Robot spawn X position')
+    spawn_y_arg = DeclareLaunchArgument('spawn_y', default_value='0',
+                                        description='Robot spawn Y position')
+    lidar_arg = DeclareLaunchArgument('lidar', default_value='ld19',
+                                      description='Lidar model: ld19 | lds02rr | none')
     use_mag_arg = DeclareLaunchArgument('use_mag', default_value='false',
                                         description='Enable magnetometer fusion in Madgwick filter')
     use_ld07_arg = DeclareLaunchArgument('use_ld07', default_value='false',
@@ -28,6 +36,7 @@ def generate_launch_description():
         Command([
             'xacro ', str(desc_share / 'urdf' / 'picar2.urdf.xacro'),
             ' use_sim:=true',
+            ' lidar:=', LaunchConfiguration('lidar'),
         ]),
         value_type=str)
 
@@ -38,7 +47,7 @@ def generate_launch_description():
         PythonLaunchDescriptionSource(
             str(ros_gz_sim_share / 'launch' / 'gz_sim.launch.py')
         ),
-        launch_arguments={'gz_args': f'-r {world_file}'}.items(),
+        launch_arguments={'gz_args': ['-r ', LaunchConfiguration('world')]}.items(),
     )
 
     spawn_robot = Node(
@@ -47,6 +56,8 @@ def generate_launch_description():
         arguments=[
             '-name',  'picar2',
             '-topic', 'robot_description',
+            '-x',     LaunchConfiguration('spawn_x'),
+            '-y',     LaunchConfiguration('spawn_y'),
             '-z',     '0.05',
         ],
         output='screen',
@@ -139,6 +150,10 @@ def generate_launch_description():
     )
 
     return LaunchDescription([
+        world_arg,
+        spawn_x_arg,
+        spawn_y_arg,
+        lidar_arg,
         use_mag_arg,
         use_ld07_arg,
         use_sen0628_arg,
