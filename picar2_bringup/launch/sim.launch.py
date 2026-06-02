@@ -5,7 +5,7 @@ from launch import LaunchDescription
 from launch.actions import DeclareLaunchArgument, IncludeLaunchDescription
 from launch.conditions import IfCondition
 from launch.launch_description_sources import PythonLaunchDescriptionSource
-from launch.substitutions import Command, LaunchConfiguration
+from launch.substitutions import Command, LaunchConfiguration, PythonExpression
 from launch_ros.actions import Node
 from launch_ros.parameter_descriptions import ParameterValue
 
@@ -31,6 +31,8 @@ def generate_launch_description():
                                          description='Enable LD07 scan in costmap (sensor always simulated)')
     use_sen0628_arg = DeclareLaunchArgument('use_sen0628', default_value='true',
                                              description='Enable SEN0628 pointcloud in costmap (sensor always simulated)')
+    headless_arg = DeclareLaunchArgument('headless', default_value='false',
+                                         description='Run Gazebo server only (no GUI window)')
 
     robot_description = ParameterValue(
         Command([
@@ -43,11 +45,16 @@ def generate_launch_description():
     controllers_yaml = str(bringup_share / 'config' / 'controllers.yaml')
 
     # ── Gazebo ────────────────────────────────────────────────────────────────
+    gz_args = PythonExpression([
+        '("-s -r " if "', LaunchConfiguration('headless'), '" == "true" else "-r ") + "',
+        LaunchConfiguration('world'), '"',
+    ])
+
     gazebo = IncludeLaunchDescription(
         PythonLaunchDescriptionSource(
             str(ros_gz_sim_share / 'launch' / 'gz_sim.launch.py')
         ),
-        launch_arguments={'gz_args': ['-r ', LaunchConfiguration('world')]}.items(),
+        launch_arguments={'gz_args': gz_args}.items(),
     )
 
     spawn_robot = Node(
@@ -154,6 +161,7 @@ def generate_launch_description():
         spawn_x_arg,
         spawn_y_arg,
         lidar_arg,
+        headless_arg,
         use_mag_arg,
         use_ld07_arg,
         use_sen0628_arg,
