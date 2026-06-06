@@ -335,7 +335,12 @@
 
   <!-- Sensors (fixed) -->
   <joint name="laser_joint" type="fixed">
-    <origin xyz="0.012548 0 0.127" rpy="0 0 0"/>
+    <xacro:if value="${lidar_model == 'ld19'}">
+      <origin xyz="0.042548 0.005 0.127" rpy="0 0 0.0523605"/>
+    </xacro:if>
+    <xacro:unless value="${lidar_model == 'ld19'}">
+      <origin xyz="0.012548 0 0.127" rpy="0 0 0"/>
+    </xacro:unless>
     <parent link="base_link"/>
     <child  link="laser_link"/>
   </joint>
@@ -349,7 +354,7 @@
   <!-- SEN0628 matrix ToF sensor — same mount position as LD07, no tilt -->
   <link name="sen0628_link"/>
   <joint name="sen0628_joint" type="fixed">
-    <origin xyz="0.172 0 0.034" rpy="${pi} 0 0"/>
+    <origin xyz="0.172 0 0.054" rpy="0 0 0"/>
     <parent link="base_link"/>
     <child  link="sen0628_link"/>
   </joint>
