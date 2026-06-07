@@ -243,8 +243,8 @@ def generate_launch_description():
                 plugin='pcl_ros::StatisticalOutlierRemoval',
                 name='sen0628_filter',
                 parameters=[{
-                    'mean_k': 8,
-                    'stddev': 1.0,
+                    'mean_k': 4,
+                    'stddev': 0.5,
                 }],
                 remappings=[
                     ('input',  '/sen0628/pointcloud'),
