@@ -139,6 +139,8 @@ hardware_interface::CallbackReturn Picar2Hardware::on_init(
     ? std::stoi(info_.hardware_parameters.at("baud")) : 460800;
   imu_rate_hz_ = info_.hardware_parameters.count("imu_rate_hz")
     ? std::stoi(info_.hardware_parameters.at("imu_rate_hz")) : 50;
+  steer_max_rate_ = info_.hardware_parameters.count("steer_max_rate_rad_s")
+    ? std::stod(info_.hardware_parameters.at("steer_max_rate_rad_s")) : 4.0;
 
   // ── Steering LUT ──────────────────────────────────────────────────────────
   // rad in ROS convention: positive = left turn = negative delta_us
@@ -235,6 +237,7 @@ hardware_interface::CallbackReturn Picar2Hardware::on_activate(
     stg_t3_us_       = 0;
     sync_last_t4_us_ = 0;
   }
+  steer_slew_rad_ = 0.0;
 
   reader_running_.store(true);
   reader_thread_   = std::thread(&Picar2Hardware::reader_loop,   this);
@@ -517,7 +520,7 @@ void Picar2Hardware::process_byte(uint8_t b)
 
 // ── read — pick up latest JOINT frame pushed by STM32 at 100 Hz ──────────────
 hardware_interface::return_type Picar2Hardware::read(
-  const rclcpp::Time & /*time*/, const rclcpp::Duration & /*period*/)
+  const rclcpp::Time & /*time*/, const rclcpp::Duration & period)
 {
   if (fd_ < 0) return hardware_interface::return_type::OK;
 
@@ -534,8 +537,11 @@ hardware_interface::return_type Picar2Hardware::read(
   pos_back_right_ = stg_pos_right_;
   vel_back_left_  = stg_vel_left_;
   vel_back_right_ = stg_vel_right_;
-  pos_steer_left_  = stg_steer_;
-  pos_steer_right_ = stg_steer_;
+  double dt = period.seconds();
+  double err = stg_steer_ - steer_slew_rad_;
+  steer_slew_rad_ += std::clamp(err, -steer_max_rate_ * dt, steer_max_rate_ * dt);
+  pos_steer_left_  = steer_slew_rad_;
+  pos_steer_right_ = steer_slew_rad_;
   // Front wheels passive — estimate from rear average; left axis mirrored in URDF
   double avg_rear = (pos_back_left_ + pos_back_right_) * 0.5;
   pos_front_left_wheel_  = -avg_rear;

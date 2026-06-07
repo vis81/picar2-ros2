@@ -107,6 +107,11 @@ private:
   double  lut_us_to_rad(int16_t us_val) const;
   int16_t lut_rad_to_us(double rad_val) const;
 
+  // Servo slew-rate limiter — models physical lag between command and wheel position.
+  // steer_slew_rad_ is the reported joint state; it ramps toward stg_steer_ each read().
+  double steer_slew_rad_{0.0};
+  double steer_max_rate_{4.0};  // rad/s — tune to match actual servo speed
+
   // IMU publisher node (dedicated, so we can publish from reader thread)
   rclcpp::Node::SharedPtr imu_node_;
   rclcpp::Publisher<sensor_msgs::msg::Imu>::SharedPtr          imu_pub_;
