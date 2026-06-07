@@ -26,7 +26,7 @@ planner_server:
       angle_quantization_bins: 36            # 10° resolution — 72 caused ~42 s startup on Pi 4
       analytic_expansion_ratio: 3.5
       analytic_expansion_max_length: 3.0
-      minimum_turning_radius: 0.40           # wheelbase / tan(max_steer) = 0.235 / tan(0.6 rad) ≈ 0.34 m + margin
+      minimum_turning_radius: 0.52           # wheelbase / tan(max_steer) = 0.235 / tan(0.6 rad) ≈ 0.34 m + margin
       reverse_penalty: 2.0
       change_penalty: 0.0
       non_straight_penalty: 1.2
@@ -67,9 +67,9 @@ controller_server:
     FollowPath:
       plugin: nav2_regulated_pure_pursuit_controller::RegulatedPurePursuitController
       desired_linear_vel: 0.40
-      lookahead_dist: 0.4
-      min_lookahead_dist: 0.3
-      max_lookahead_dist: 0.9
+      lookahead_dist: 0.8
+      min_lookahead_dist: 0.6
+      max_lookahead_dist: 1.8
       lookahead_time: 1.5
       transform_tolerance: 0.1
       use_velocity_scaled_lookahead_dist: false
@@ -155,7 +155,7 @@ local_costmap:
           raytrace_min_range: 0.0
           max_obstacle_height: 2.0
         sen0628:
-          topic: /sen0628/pointcloud_filtered
+          topic: /sen0628/pointcloud
           data_type: PointCloud2
           marking: true
           clearing: true
@@ -163,9 +163,8 @@ local_costmap:
           obstacle_min_range: 0.005
           raytrace_max_range: 0.40
           raytrace_min_range: 0.0
-          min_obstacle_height: 0.02   # rejects floor returns after TF tilt
+          min_obstacle_height: 0.02
           max_obstacle_height: 2.0
-          observation_persistence: 0.3
       inflation_layer:
         plugin: nav2_costmap_2d::InflationLayer
         cost_scaling_factor: 5.0
@@ -201,7 +200,7 @@ global_costmap:
           raytrace_min_range: 0.0
           max_obstacle_height: 2.0
         sen0628:
-          topic: /sen0628/pointcloud_filtered
+          topic: /sen0628/pointcloud
           data_type: PointCloud2
           marking: true
           clearing: true
@@ -209,9 +208,8 @@ global_costmap:
           obstacle_min_range: 0.005
           raytrace_max_range: 0.40
           raytrace_min_range: 0.0
-          min_obstacle_height: 0.02   # rejects floor returns after TF tilt
+          min_obstacle_height: 0.02
           max_obstacle_height: 2.0
-          observation_persistence: 0.3
       inflation_layer:
         plugin: nav2_costmap_2d::InflationLayer
         cost_scaling_factor: 5.0
