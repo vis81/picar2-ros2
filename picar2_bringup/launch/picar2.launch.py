@@ -229,6 +229,33 @@ def generate_launch_description():
             lifecycle_node_matcher=matches_action(sen0628_node),
             transition_id=Transition.TRANSITION_ACTIVATE))]))
 
+    # Statistical outlier removal: removes points whose mean distance to their
+    # k nearest neighbours exceeds mean + stddev_mult * stddev of the cloud.
+    # Works on the raw 8×8 cloud; output consumed by Nav2 and RViz.
+    sen0628_filter = ComposableNodeContainer(
+        name='sen0628_filter_container',
+        namespace='',
+        package='rclcpp_components',
+        executable='component_container',
+        composable_node_descriptions=[
+            ComposableNode(
+                package='pcl_ros',
+                plugin='pcl_ros::StatisticalOutlierRemoval',
+                name='sen0628_filter',
+                parameters=[{
+                    'mean_k': 8,
+                    'stddev': 1.0,
+                }],
+                remappings=[
+                    ('input',  '/sen0628/pointcloud'),
+                    ('output', '/sen0628/pointcloud_filtered'),
+                ],
+            ),
+        ],
+        output='screen',
+        condition=IfCondition(LaunchConfiguration('use_sen0628')),
+    )
+
     # ── LD07 structured-light depth sensor — front of car ────────────────────
     # Publishes /ld07/scan in ld07_link frame. Serial port: /dev/ld07 (udev).
     ld07_node = Node(
@@ -266,5 +293,6 @@ def generate_launch_description():
         sen0628_node,
         sen0628_configure,
         sen0628_activate,
+        sen0628_filter,
         ld07_node,
     ])

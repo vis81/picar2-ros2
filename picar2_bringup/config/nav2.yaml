@@ -155,7 +155,7 @@ local_costmap:
           raytrace_min_range: 0.0
           max_obstacle_height: 2.0
         sen0628:
-          topic: /sen0628/pointcloud
+          topic: /sen0628/pointcloud_filtered
           data_type: PointCloud2
           marking: true
           clearing: true
@@ -200,7 +200,7 @@ global_costmap:
           raytrace_min_range: 0.0
           max_obstacle_height: 2.0
         sen0628:
-          topic: /sen0628/pointcloud
+          topic: /sen0628/pointcloud_filtered
           data_type: PointCloud2
           marking: true
           clearing: true
