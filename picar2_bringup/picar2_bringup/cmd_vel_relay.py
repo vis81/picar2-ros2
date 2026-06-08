@@ -7,7 +7,7 @@ from rclpy.node import Node
 from geometry_msgs.msg import Twist, TwistStamped
 
 
-MAX_ANG_VEL = 0.5  # rad/s — clamp all sources (teleop, nav2, explore)
+MAX_ANG_VEL = 1.2  # rad/s — hardware max: v/r = 0.4/0.34 ≈ 1.16 rad/s at full lock
 
 
 class CmdVelRelay(Node):
