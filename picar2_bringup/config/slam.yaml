@@ -56,5 +56,6 @@ slam_toolbox:
     transform_publish_period:   0.02   # 50 Hz
     tf_buffer_duration:         30.0
     throttle_scans:             1
+    transform_timeout:          0.2    # stamp TF 0.2 s into the future so controller never hits extrapolation
 
     enable_interactive_mode: true
