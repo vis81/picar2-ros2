@@ -31,6 +31,10 @@ def generate_launch_description():
                                              description='Enable SEN0628 matrix ToF front sensor')
     sen0628_port_arg = DeclareLaunchArgument('sen0628_port', default_value='/dev/sen0628',
                                               description='Serial port for SEN0628')
+    use_foxglove_arg = DeclareLaunchArgument('use_foxglove', default_value='true',
+                                              description='Enable foxglove_bridge WebSocket server')
+    foxglove_port_arg = DeclareLaunchArgument('foxglove_port', default_value='8765',
+                                               description='Port for foxglove_bridge WebSocket server')
     calib_arg = DeclareLaunchArgument(
         'calib_file',
         default_value=str(bringup_share / 'config' / 'imu_calib.yaml'),
@@ -243,6 +247,31 @@ def generate_launch_description():
         ],
     )
 
+    # ── Foxglove bridge — WebSocket server for Foxglove Studio ──────────────
+    # Connect from Foxglove Studio (desktop or studio.foxglove.dev) to:
+    #   ws://<pi-ip>:8765
+    # Exposes all topics, services, parameters, /tf and connection graph.
+    foxglove_bridge = Node(
+        package='foxglove_bridge',
+        executable='foxglove_bridge',
+        name='foxglove_bridge',
+        output='screen',
+        condition=IfCondition(LaunchConfiguration('use_foxglove')),
+        parameters=[{
+            'port':                    LaunchConfiguration('foxglove_port'),
+            'address':                 '0.0.0.0',
+            'tls':                     False,
+            'topic_whitelist':         ['.*'],
+            'param_whitelist':         ['.*'],
+            'service_whitelist':       ['.*'],
+            'client_topic_whitelist':  ['.*'],
+            'send_buffer_limit':       10_000_000,
+            'use_sim_time':            False,
+            'capabilities':            ['clientPublish', 'parameters', 'parametersSubscribe',
+                                        'services', 'connectionGraph', 'assets'],
+        }],
+    )
+
     return LaunchDescription([
         port_arg,
         baud_arg,
@@ -251,6 +280,8 @@ def generate_launch_description():
         use_ld07_arg,
         use_sen0628_arg,
         sen0628_port_arg,
+        use_foxglove_arg,
+        foxglove_port_arg,
         calib_arg,
         ros2_control_node,
         robot_state_publisher,
@@ -269,4 +300,5 @@ def generate_launch_description():
         sen0628_configure,
         sen0628_activate,
         ld07_node,
+        foxglove_bridge,
     ])
