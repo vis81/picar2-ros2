@@ -272,6 +272,23 @@ def generate_launch_description():
         condition=IfCondition(LaunchConfiguration('use_vizanti')),
     )
 
+    # Bridges Vizanti's /waypoints (PoseArray) → /goal_pose (PoseStamped),
+    # one waypoint at a time, advancing on TF-based arrival check.
+    # Without this, Vizanti's Start button publishes /waypoints but Nav2
+    # never receives any goals.
+    vizanti_waypoint_runner = Node(
+        package='vizanti_demos',
+        executable='waypoints_to_simple_goals.py',
+        name='waypoints_to_simple_goals',
+        output='screen',
+        condition=IfCondition(LaunchConfiguration('use_vizanti')),
+        parameters=[{
+            'rate':               10,
+            'robot_link':         'base_link',
+            'goal_reached_range': 0.3,
+        }],
+    )
+
     # ── Foxglove bridge — WebSocket server for Foxglove Studio ──────────────
     # Connect from Foxglove Studio (desktop or studio.foxglove.dev) to:
     #   ws://<pi-ip>:8765
@@ -330,4 +347,5 @@ def generate_launch_description():
         ld07_node,
         foxglove_bridge,
         vizanti_launch,
+        vizanti_waypoint_runner,
     ])
