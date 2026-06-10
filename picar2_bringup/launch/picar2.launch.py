@@ -2,9 +2,11 @@ from pathlib import Path
 
 from ament_index_python.packages import get_package_share_directory
 from launch import LaunchDescription
-from launch.actions import DeclareLaunchArgument, EmitEvent, RegisterEventHandler
+from launch.actions import (DeclareLaunchArgument, EmitEvent,
+                            IncludeLaunchDescription, RegisterEventHandler)
 from launch.conditions import IfCondition
 from launch.events import matches_action
+from launch.launch_description_sources import PythonLaunchDescriptionSource
 from launch.substitutions import Command, EqualsSubstitution, LaunchConfiguration
 from launch_ros.actions import ComposableNodeContainer, LifecycleNode, Node
 from launch_ros.descriptions import ComposableNode
@@ -35,6 +37,12 @@ def generate_launch_description():
                                               description='Enable foxglove_bridge WebSocket server')
     foxglove_port_arg = DeclareLaunchArgument('foxglove_port', default_value='8765',
                                                description='Port for foxglove_bridge WebSocket server')
+    use_vizanti_arg = DeclareLaunchArgument('use_vizanti', default_value='true',
+                                             description='Enable Vizanti web mission planner')
+    vizanti_port_arg = DeclareLaunchArgument('vizanti_port', default_value='5000',
+                                              description='Port for Vizanti Flask UI')
+    vizanti_rosbridge_port_arg = DeclareLaunchArgument('vizanti_rosbridge_port', default_value='5001',
+                                                        description='Port for Vizanti rosbridge WebSocket')
     calib_arg = DeclareLaunchArgument(
         'calib_file',
         default_value=str(bringup_share / 'config' / 'imu_calib.yaml'),
@@ -247,6 +255,23 @@ def generate_launch_description():
         ],
     )
 
+    # ── Vizanti — mobile-friendly web visualizer / mission planner ─────────
+    # Open browser at http://<pi-ip>:5000 to access the UI.
+    # Includes vizanti_server (Flask), rosbridge_server, rosapi,
+    # vizanti_tf_consolidator (C++), and vizanti_service_handler.
+    vizanti_launch = IncludeLaunchDescription(
+        PythonLaunchDescriptionSource(
+            str(Path(get_package_share_directory('vizanti_server')) /
+                'launch' / 'vizanti_server.launch.py')
+        ),
+        launch_arguments={
+            'port':           LaunchConfiguration('vizanti_port'),
+            'port_rosbridge': LaunchConfiguration('vizanti_rosbridge_port'),
+            'flask_debug':    'False',
+        }.items(),
+        condition=IfCondition(LaunchConfiguration('use_vizanti')),
+    )
+
     # ── Foxglove bridge — WebSocket server for Foxglove Studio ──────────────
     # Connect from Foxglove Studio (desktop or studio.foxglove.dev) to:
     #   ws://<pi-ip>:8765
@@ -282,6 +307,9 @@ def generate_launch_description():
         sen0628_port_arg,
         use_foxglove_arg,
         foxglove_port_arg,
+        use_vizanti_arg,
+        vizanti_port_arg,
+        vizanti_rosbridge_port_arg,
         calib_arg,
         ros2_control_node,
         robot_state_publisher,
@@ -301,4 +329,5 @@ def generate_launch_description():
         sen0628_activate,
         ld07_node,
         foxglove_bridge,
+        vizanti_launch,
     ])
