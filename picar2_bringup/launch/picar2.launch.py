@@ -73,11 +73,18 @@ def generate_launch_description():
         output='both',
     )
 
-    # robot_state_publisher converts joint_states → TF
+    # robot_state_publisher converts joint_states → TF.
+    # publish_frequency caps the dynamic-transform publish rate; defaults to
+    # publishing per /joint_states callback (50 Hz). 20 Hz is plenty for RViz
+    # / Foxglove smoothness; nav2 + EKF read joint_states / odom directly,
+    # not RSP-published TFs, so navigation behavior at speed is unaffected.
     robot_state_publisher = Node(
         package='robot_state_publisher',
         executable='robot_state_publisher',
-        parameters=[{'robot_description': robot_description}],
+        parameters=[{
+            'robot_description': robot_description,
+            'publish_frequency': 20.0,
+        }],
     )
 
     # Spawners — retry until controller_manager is up
