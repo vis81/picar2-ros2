@@ -98,6 +98,7 @@ def generate_launch_description():
         executable='cmd_vel_relay.py',
         name='cmd_vel_relay',
         output='screen',
+        parameters=[controllers_yaml],
     )
 
     ekf_node = Node(

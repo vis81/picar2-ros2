@@ -7,13 +7,11 @@ from rclpy.node import Node
 from geometry_msgs.msg import Twist, TwistStamped
 
 
-MAX_ANG_VEL  = 1.2   # rad/s — hardware max: v/r = 0.4/0.34 ≈ 1.16 rad/s at full lock
-MAX_REV_VEL  = 0.25  # m/s  — cap reverse speed; RPPC uses same desired_linear_vel both ways
-
-
 class CmdVelRelay(Node):
     def __init__(self):
         super().__init__('cmd_vel_relay')
+        self.declare_parameter('max_angular_vel', 1.2)
+        self.declare_parameter('max_reverse_vel', 0.25)
         self.pub = self.create_publisher(
             TwistStamped,
             '/ackermann_steering_controller/reference',
@@ -21,12 +19,14 @@ class CmdVelRelay(Node):
         self.create_subscription(Twist, 'cmd_vel', self._cb, 10)
 
     def _cb(self, msg: Twist):
+        max_ang = self.get_parameter('max_angular_vel').value
+        max_rev = self.get_parameter('max_reverse_vel').value
         out = TwistStamped()
         out.header.stamp = self.get_clock().now().to_msg()
         out.twist = msg
-        out.twist.angular.z = max(-MAX_ANG_VEL, min(MAX_ANG_VEL, msg.angular.z))
-        if msg.linear.x < -MAX_REV_VEL:
-            out.twist.linear.x = -MAX_REV_VEL
+        out.twist.angular.z = max(-max_ang, min(max_ang, msg.angular.z))
+        if msg.linear.x < -max_rev:
+            out.twist.linear.x = -max_rev
         self.pub.publish(out)
 
 
