@@ -127,6 +127,41 @@ waypoint_follower:
       waypoint_pause_duration: 0
 
 # ── Costmaps ──────────────────────────────────────────────────────────────────
+# Anchor definitions — top-level keys starting with _ are ignored by the ROS2
+# parameter loader, so these exist only to hold YAML anchors for reuse below.
+_costmap:
+  # base_footprint is at the rear axle; chassis extends ~40 mm behind it
+  footprint: &footprint "[[-0.04, -0.095], [-0.04, 0.095], [0.30, 0.095], [0.30, -0.095]]"
+  obstacle_layer: &obstacle_layer
+    plugin: nav2_costmap_2d::ObstacleLayer
+    enabled: true
+    observation_sources: scan sen0628
+    scan:
+      topic: /lidar_node/scan
+      data_type: LaserScan
+      marking: true
+      clearing: true
+      obstacle_max_range: 4.5
+      obstacle_min_range: 0.0
+      raytrace_max_range: 5.0
+      raytrace_min_range: 0.0
+      max_obstacle_height: 2.0
+    sen0628:
+      topic: /sen0628/pointcloud
+      data_type: PointCloud2
+      marking: true
+      clearing: true
+      obstacle_max_range: 1.0
+      obstacle_min_range: 0.005
+      raytrace_max_range: 1.0
+      raytrace_min_range: 0.0
+      min_obstacle_height: 0.03
+      max_obstacle_height: 2.0
+  inflation_layer: &inflation_layer
+    plugin: nav2_costmap_2d::InflationLayer
+    cost_scaling_factor: 5.0
+    inflation_radius: 0.5
+
 local_costmap:
   local_costmap:
     ros__parameters:
@@ -138,38 +173,10 @@ local_costmap:
       width: 3
       height: 3
       resolution: 0.05
-      # base_footprint is at the rear axle; chassis extends ~40 mm behind it
-      footprint: "[[-0.04, -0.095], [-0.04, 0.095], [0.30, 0.095], [0.30, -0.095]]"
+      footprint: *footprint
       plugins: [obstacle_layer, inflation_layer]
-      obstacle_layer:
-        plugin: nav2_costmap_2d::ObstacleLayer
-        enabled: true
-        observation_sources: scan sen0628
-        scan:
-          topic: /lidar_node/scan
-          data_type: LaserScan
-          marking: true
-          clearing: true
-          obstacle_max_range: 4.5
-          obstacle_min_range: 0.0
-          raytrace_max_range: 5.0
-          raytrace_min_range: 0.0
-          max_obstacle_height: 2.0
-        sen0628:
-          topic: /sen0628/pointcloud
-          data_type: PointCloud2
-          marking: true
-          clearing: true
-          obstacle_max_range: 1.0
-          obstacle_min_range: 0.005
-          raytrace_max_range: 1.0
-          raytrace_min_range: 0.0
-          min_obstacle_height: 0.03
-          max_obstacle_height: 2.0
-      inflation_layer:
-        plugin: nav2_costmap_2d::InflationLayer
-        cost_scaling_factor: 5.0
-        inflation_radius: 0.5
+      obstacle_layer: *obstacle_layer
+      inflation_layer: *inflation_layer
       always_send_full_costmap: true
 
 global_costmap:
@@ -181,38 +188,11 @@ global_costmap:
       robot_base_frame: base_footprint
       resolution: 0.05
       track_unknown_space: true
-      footprint: "[[-0.04, -0.095], [-0.04, 0.095], [0.30, 0.095], [0.30, -0.095]]"
+      footprint: *footprint
       plugins: [static_layer, obstacle_layer, inflation_layer]
       static_layer:
         plugin: nav2_costmap_2d::StaticLayer
         map_subscribe_transient_local: true
-      obstacle_layer:
-        plugin: nav2_costmap_2d::ObstacleLayer
-        enabled: true
-        observation_sources: scan sen0628
-        scan:
-          topic: /lidar_node/scan
-          data_type: LaserScan
-          marking: true
-          clearing: true
-          obstacle_max_range: 4.5
-          obstacle_min_range: 0.0
-          raytrace_max_range: 5.0
-          raytrace_min_range: 0.0
-          max_obstacle_height: 2.0
-        sen0628:
-          topic: /sen0628/pointcloud
-          data_type: PointCloud2
-          marking: true
-          clearing: true
-          obstacle_max_range: 1.0
-          obstacle_min_range: 0.005
-          raytrace_max_range: 1.0
-          raytrace_min_range: 0.0
-          min_obstacle_height: 0.03
-          max_obstacle_height: 2.0
-      inflation_layer:
-        plugin: nav2_costmap_2d::InflationLayer
-        cost_scaling_factor: 5.0
-        inflation_radius: 0.5
+      obstacle_layer: *obstacle_layer
+      inflation_layer: *inflation_layer
       always_send_full_costmap: true
