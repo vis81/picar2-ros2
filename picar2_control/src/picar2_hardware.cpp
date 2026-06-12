@@ -27,6 +27,7 @@ static constexpr uint8_t PROTO_MAX_LEN     = 32;
 static constexpr uint8_t MSG_CMD_VEL       = 0x80;
 static constexpr uint8_t MSG_SET_RATE      = 0x82;
 static constexpr uint8_t MSG_TIMESYNC      = 0x84;
+static constexpr uint8_t MSG_SERVO_WRITE   = 0x87;
 static constexpr uint8_t STREAM_JOINT      = 0x01;
 static constexpr uint8_t STREAM_IMU        = 0x02;
 static constexpr uint8_t MSG_TIMESYNC_RESP = 0x05;
@@ -141,6 +142,10 @@ hardware_interface::CallbackReturn Picar2Hardware::on_init(
     ? std::stoi(info_.hardware_parameters.at("imu_rate_hz")) : 50;
   steer_max_rate_ = info_.hardware_parameters.count("steer_max_rate_rad_s")
     ? std::stod(info_.hardware_parameters.at("steer_max_rate_rad_s")) : 4.0;
+  pan_us_per_rad_ = info_.hardware_parameters.count("pan_us_per_rad")
+    ? std::stod(info_.hardware_parameters.at("pan_us_per_rad")) : 500.0;
+  tilt_us_per_rad_ = info_.hardware_parameters.count("tilt_us_per_rad")
+    ? std::stod(info_.hardware_parameters.at("tilt_us_per_rad")) : 500.0;
 
   // ── Steering LUT ──────────────────────────────────────────────────────────
   // rad in ROS convention: positive = left turn = negative delta_us
@@ -268,10 +273,14 @@ hardware_interface::CallbackReturn Picar2Hardware::on_deactivate(
   uart_write(stop_frame, encode_frame(MSG_SET_RATE, stop_joint, 3, stop_frame));
   uart_write(stop_frame, encode_frame(MSG_SET_RATE, stop_imu,   3, stop_frame));
 
-  // Zero velocity, neutral steer (0 = center)
+  // Zero velocity, neutral steer + pan/tilt (0 = center for all)
   uint8_t vel_payload[6] = {0, 0, 0, 0, 0, 0};
   uint8_t frame[16];
   uart_write(frame, encode_frame(MSG_CMD_VEL, vel_payload, sizeof(vel_payload), frame));
+  uint8_t pan_neutral[3]  = {1, 0, 0};
+  uint8_t tilt_neutral[3] = {2, 0, 0};
+  uart_write(frame, encode_frame(MSG_SERVO_WRITE, pan_neutral,  3, frame));
+  uart_write(frame, encode_frame(MSG_SERVO_WRITE, tilt_neutral, 3, frame));
 
   reader_running_.store(false);
   if (reader_thread_.joinable())   reader_thread_.join();
@@ -296,6 +305,8 @@ std::vector<hardware_interface::StateInterface> Picar2Hardware::export_state_int
   interfaces.emplace_back("front_right_steer_joint", hardware_interface::HW_IF_POSITION, &pos_steer_right_);
   interfaces.emplace_back("front_left_wheel_joint",  hardware_interface::HW_IF_POSITION, &pos_front_left_wheel_);
   interfaces.emplace_back("front_right_wheel_joint", hardware_interface::HW_IF_POSITION, &pos_front_right_wheel_);
+  interfaces.emplace_back("pan_joint",  hardware_interface::HW_IF_POSITION, &pos_pan_);
+  interfaces.emplace_back("tilt_joint", hardware_interface::HW_IF_POSITION, &pos_tilt_);
   return interfaces;
 }
 
@@ -306,6 +317,8 @@ std::vector<hardware_interface::CommandInterface> Picar2Hardware::export_command
   interfaces.emplace_back("back_right_joint",        hardware_interface::HW_IF_VELOCITY, &cmd_vel_back_right_);
   interfaces.emplace_back("front_left_steer_joint",  hardware_interface::HW_IF_POSITION, &cmd_steer_left_);
   interfaces.emplace_back("front_right_steer_joint", hardware_interface::HW_IF_POSITION, &cmd_steer_right_);
+  interfaces.emplace_back("pan_joint",  hardware_interface::HW_IF_POSITION, &cmd_pan_);
+  interfaces.emplace_back("tilt_joint", hardware_interface::HW_IF_POSITION, &cmd_tilt_);
   return interfaces;
 }
 
@@ -546,6 +559,9 @@ hardware_interface::return_type Picar2Hardware::read(
   double avg_rear = (pos_back_left_ + pos_back_right_) * 0.5;
   pos_front_left_wheel_  = -avg_rear;
   pos_front_right_wheel_ =  avg_rear;
+  // Pan/tilt: open-loop — state follows commanded position
+  pos_pan_  = cmd_pan_;
+  pos_tilt_ = cmd_tilt_;
   int64_t pi_us = stg_pi_time_us_;
   int64_t t3    = stg_t3_us_;
   joint_ready_  = false;
@@ -580,6 +596,23 @@ hardware_interface::return_type Picar2Hardware::write(
 
   uint8_t frame[16];
   uart_write(frame, encode_frame(MSG_CMD_VEL, payload, sizeof(payload), frame));
+
+  auto to_servo_us = [](double rad, double us_per_rad) -> int16_t {
+    return static_cast<int16_t>(std::clamp(
+      std::round(rad * us_per_rad),
+      static_cast<double>(INT16_MIN), static_cast<double>(INT16_MAX)));
+  };
+
+  uint8_t pan_payload[3]  = {1, 0, 0};
+  uint8_t tilt_payload[3] = {2, 0, 0};
+  int16_t pan_us  = to_servo_us(cmd_pan_,  pan_us_per_rad_);
+  int16_t tilt_us = to_servo_us(cmd_tilt_, tilt_us_per_rad_);
+  pan_payload[1]  = static_cast<uint8_t>(pan_us  & 0xFF);
+  pan_payload[2]  = static_cast<uint8_t>(pan_us  >> 8);
+  tilt_payload[1] = static_cast<uint8_t>(tilt_us & 0xFF);
+  tilt_payload[2] = static_cast<uint8_t>(tilt_us >> 8);
+  uart_write(frame, encode_frame(MSG_SERVO_WRITE, pan_payload,  3, frame));
+  uart_write(frame, encode_frame(MSG_SERVO_WRITE, tilt_payload, 3, frame));
 
   return hardware_interface::return_type::OK;
 }

@@ -99,6 +99,12 @@ def generate_launch_description():
         arguments=['ackermann_steering_controller', '--controller-manager-timeout', '60'],
     )
 
+    pan_tilt_spawner = Node(
+        package='controller_manager',
+        executable='spawner',
+        arguments=['pan_tilt_controller', '--controller-manager-timeout', '60'],
+    )
+
     cmd_vel_relay = Node(
         package='picar2_bringup',
         executable='cmd_vel_relay.py',
@@ -171,6 +177,7 @@ def generate_launch_description():
         bridge,
         jsb_spawner,
         ackermann_spawner,
+        pan_tilt_spawner,
         cmd_vel_relay,
         mag_bias_observer,
         mag_bias_remover,

@@ -70,6 +70,16 @@ private:
   double cmd_vel_back_right_{0.0};
   double cmd_steer_left_{0.0};
   double cmd_steer_right_{0.0};
+  double cmd_pan_{0.0};
+  double cmd_tilt_{0.0};
+
+  // Pan/tilt state — open-loop: echoes commanded position
+  double pos_pan_{0.0};
+  double pos_tilt_{0.0};
+
+  // Pan/tilt µs/rad conversion factors (configurable via URDF params)
+  double pan_us_per_rad_{500.0};
+  double tilt_us_per_rad_{500.0};
 
   // Frame decoder state — reader thread only, no locking needed
   enum class DecodeState : uint8_t { START, TYPE, LEN, PAYLOAD, CRC };
