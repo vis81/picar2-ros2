@@ -1,0 +1,57 @@
+# teleop_twist_joy config for a Sony DualShock 4 (PS4) controller.
+#
+# Axis / button indices come from the Linux hid-playstation driver (modern
+# kernels) which is the same numbering as hid-sony's older "compat mode":
+#
+#   axis 0  left stick X   (left = -1, right = +1)
+#   axis 1  left stick Y   (up = -1, down = +1)
+#   axis 2  L2 trigger     (released = -1, fully pressed = +1)
+#   axis 3  right stick X
+#   axis 4  right stick Y
+#   axis 5  R2 trigger     (released = -1, fully pressed = +1)
+#   axis 6  D-pad X        (-1 / 0 / +1)
+#   axis 7  D-pad Y
+#
+#   btn 0   X (cross)
+#   btn 1   ○ (circle)
+#   btn 2   △ (triangle)
+#   btn 3   □ (square)
+#   btn 4   L1
+#   btn 5   R1
+#   btn 6   L2 (digital click)
+#   btn 7   R2 (digital click)
+#   btn 8   Share
+#   btn 9   Options
+#   btn 10  PS
+#   btn 11  L3 (left stick click)
+#   btn 12  R3
+#
+# Mapping rationale:
+#   - Right stick controls the car (Y = forward/back, X = turn).
+#   - R1 is a hold-to-drive deadman so an idle stick won't creep.
+#   - L1 turbo doubles the cap up to controllers.yaml's reverse limit.
+#
+# Sign rationale (axis convention is "up/right = positive" in the kernel):
+#   - scale_linear.x = -0.40   right-stick UP (-1) × -0.4 = +0.4 m/s forward
+#   - scale_angular.yaw = -1.0 right-stick RIGHT (+1) × -1 = -1 rad/s
+#                              (REP-103: negative yaw = clockwise = turn right)
+
+teleop_twist_joy_node:
+  ros__parameters:
+    require_enable_button: true
+    enable_button: 5            # R1 — hold to drive
+    enable_turbo_button: 4      # L1 — hold for turbo
+
+    axis_linear:
+      x: 4                      # right stick Y
+    scale_linear:
+      x: 0.40                   # forward cap = controllers.yaml desired_linear_vel
+    scale_linear_turbo:
+      x: 0.60                   # turbo overshoots; controller will clip if needed
+
+    axis_angular:
+      yaw: 3                    # right stick X
+    scale_angular:
+      yaw: 1.00                 # stick-left = +yaw (turn left, REP-103)
+    scale_angular_turbo:
+      yaw: 1.50

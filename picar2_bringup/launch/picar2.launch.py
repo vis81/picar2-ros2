@@ -43,6 +43,12 @@ def generate_launch_description():
                                               description='Port for Vizanti Flask UI')
     vizanti_rosbridge_port_arg = DeclareLaunchArgument('vizanti_rosbridge_port', default_value='5001',
                                                         description='Port for Vizanti rosbridge WebSocket')
+    use_joy_arg = DeclareLaunchArgument('use_joy', default_value='false',
+                                         description='Enable joystick teleop (teleop_twist_joy)')
+    joy_dev_arg = DeclareLaunchArgument('joy_dev', default_value='0',
+                                         description='SDL device index for joy_node (0 = /dev/input/js0)')
+    joy_config_arg = DeclareLaunchArgument('joy_config', default_value='ps4',
+                                            description='Joystick config name in picar2_bringup/config/<name>.yaml')
     calib_arg = DeclareLaunchArgument(
         'calib_file',
         default_value=str(bringup_share / 'config' / 'imu_calib.yaml'),
@@ -269,6 +275,25 @@ def generate_launch_description():
         ],
     )
 
+    # ── Joystick teleop (teleop_twist_joy + joy) ─────────────────────────────
+    # Includes joy_node and teleop_twist_joy_node. joy_config picks the
+    # axis/button mapping; ps4.yaml is the DualShock 4 default.
+    joy_launch = IncludeLaunchDescription(
+        PythonLaunchDescriptionSource(
+            str(Path(get_package_share_directory('teleop_twist_joy')) /
+                'launch' / 'teleop-launch.py')
+        ),
+        launch_arguments={
+            'joy_dev': LaunchConfiguration('joy_dev'),
+            'config_filepath': [
+                str(bringup_share / 'config') + '/',
+                LaunchConfiguration('joy_config'),
+                '.yaml',
+            ],
+        }.items(),
+        condition=IfCondition(LaunchConfiguration('use_joy')),
+    )
+
     # ── Vizanti — mobile-friendly web visualizer / mission planner ─────────
     # Open browser at http://<pi-ip>:5000 to access the UI.
     # Includes vizanti_server (Flask), rosbridge_server, rosapi,
@@ -341,6 +366,9 @@ def generate_launch_description():
         use_vizanti_arg,
         vizanti_port_arg,
         vizanti_rosbridge_port_arg,
+        use_joy_arg,
+        joy_dev_arg,
+        joy_config_arg,
         calib_arg,
         ros2_control_node,
         robot_state_publisher,
@@ -363,4 +391,5 @@ def generate_launch_description():
         foxglove_bridge,
         vizanti_launch,
         vizanti_waypoint_runner,
+        joy_launch,
     ])
