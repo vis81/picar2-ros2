@@ -11,6 +11,7 @@ install(PROGRAMS
   picar2_bringup/cmd_vel_relay.py
   picar2_bringup/odom_cal.py
   picar2_bringup/imu_verify.py
+  picar2_bringup/joy_feedback.py
   DESTINATION lib/${PROJECT_NAME}
 )
 

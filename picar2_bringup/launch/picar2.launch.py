@@ -275,6 +275,18 @@ def generate_launch_description():
         ],
     )
 
+    # ── DualShock 4 feedback (rumble + lightbar) ─────────────────────────────
+    # Subscribes to /joy/rumble (Float32MultiArray [strong, weak, dur_s]) and
+    # /joy/led (ColorRGBA). Bypasses joy_node's SDL2 path, which only drives
+    # the strong motor; this reaches both rumble channels and the RGB LEDs.
+    joy_feedback = Node(
+        package='picar2_bringup',
+        executable='joy_feedback.py',
+        name='joy_feedback',
+        output='screen',
+        condition=IfCondition(LaunchConfiguration('use_joy')),
+    )
+
     # ── Joystick teleop (teleop_twist_joy + joy) ─────────────────────────────
     # Includes joy_node and teleop_twist_joy_node. joy_config picks the
     # axis/button mapping; ps4.yaml is the DualShock 4 default.
@@ -392,4 +404,5 @@ def generate_launch_description():
         vizanti_launch,
         vizanti_waypoint_runner,
         joy_launch,
+        joy_feedback,
     ])
