@@ -10,6 +10,9 @@ from launch_ros.actions import Node
 def generate_launch_description():
     bringup_share = Path(get_package_share_directory('picar2_bringup'))
     nav2_yaml = str(bringup_share / 'config' / 'nav2.yaml')
+    # Custom navigate_through_poses BT — same as upstream w/recovery, with
+    # the <Spin> node stripped (Ackermann can't spin in place).
+    nav_through_poses_bt = str(bringup_share / 'config' / 'nav_through_poses_ackermann.xml')
     use_sim_time = LaunchConfiguration('use_sim_time')
 
     # Assumes bringup + cartographer are already running.
@@ -55,7 +58,10 @@ def generate_launch_description():
             package='nav2_bt_navigator',
             executable='bt_navigator',
             output='screen',
-            parameters=[nav2_yaml, {'use_sim_time': use_sim_time}],
+            parameters=[nav2_yaml, {
+                'use_sim_time': use_sim_time,
+                'default_nav_through_poses_bt_xml': nav_through_poses_bt,
+            }],
         ),
         Node(
             package='nav2_waypoint_follower',
