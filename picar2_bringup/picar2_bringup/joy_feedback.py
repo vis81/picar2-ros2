@@ -146,10 +146,29 @@ class JoyFeedback(Node):
                 self.get_logger().warn(
                     f'{p} not writable — install etc/99-picar.rules (`make install-uarts`)')
 
+    def _rediscover(self):
+        """Re-run device discovery after a write error (controller may have
+        reconnected with a different input index). Closes the stale evdev
+        and lets the next call re-open everything fresh."""
+        if self.dev is not None:
+            try: self.dev.close()
+            except OSError: pass
+        self.dev = None
+        self.current_effect = None
+        self.leds.clear()
+        event_path, input_idx = find_ds4()
+        self._open_evdev(event_path)
+        self._open_leds(input_idx)
+        if self.dev or self.leds:
+            self.get_logger().info(f'rediscovered → rumble: {"on" if self.dev else "OFF"}, '
+                                   f'leds: {",".join(self.leds) or "NONE"}')
+
     # ── handlers ───────────────────────────────────────────────────────────
     def on_rumble(self, msg: Float32MultiArray):
         if self.dev is None:
-            return
+            self._rediscover()
+            if self.dev is None:
+                return
         data = list(msg.data) + [0.0, 0.0, 0.5]
         strong = _clip01(data[0])
         weak   = _clip01(data[1])
@@ -176,17 +195,25 @@ class JoyFeedback(Node):
             self.current_effect = self.dev.upload_effect(effect)
             self.dev.write(evdev.ecodes.EV_FF, self.current_effect, 1)
         except OSError as e:
-            self.get_logger().error(f'rumble write failed: {e}')
+            self.get_logger().warn(f'rumble write failed: {e} — rediscovering')
+            self._rediscover()
 
     def on_led(self, msg: ColorRGBA):
+        # Trigger rediscovery once per message if any path is stale; a single
+        # ENOENT from a reconnect breaks all three otherwise.
         for ch, val in (('red', msg.r), ('green', msg.g), ('blue', msg.b)):
             p = self.leds.get(ch)
-            if p is None:
-                continue
+            if p is None or not p.exists():
+                self._rediscover()
+                p = self.leds.get(ch)
+                if p is None:
+                    return
             try:
                 p.write_text(str(int(_clip01(val) * 255)))
             except OSError as e:
-                self.get_logger().error(f'led {ch} write failed: {e}')
+                self.get_logger().warn(f'led {ch} write failed: {e} — rediscovering')
+                self._rediscover()
+                return
 
 
 def _clip01(v: float) -> float:
