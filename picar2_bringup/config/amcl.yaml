@@ -1,0 +1,89 @@
+# AMCL (Adaptive Monte Carlo Localization) + map_server config for the
+# picar2. Use when you already have a saved PGM/YAML and want backend-
+# independent localization (no slam_toolbox / cartographer needed at
+# runtime). Pair with `make amcl MAP=<name>`.
+
+amcl:
+  ros__parameters:
+    use_sim_time: false
+
+    # Frames + topics — match the rest of the bringup stack.
+    base_frame_id: base_footprint
+    odom_frame_id: odom
+    global_frame_id: map
+    scan_topic: /lidar_node/scan
+
+    # Differential is the closest off-the-shelf motion model for an
+    # Ackermann robot in AMCL — there's no native Ackermann model. Works
+    # well enough since both move forward+rotate.
+    robot_model_type: nav2_amcl::DifferentialMotionModel
+
+    # Motion model noise. picar2's IMU-fused /odom is reasonably good, so
+    # we run tighter than the Nav2 defaults (which assume 0.2 each) —
+    # smaller alpha → particles cluster more tightly, better steady-state
+    # precision. Bump back to 0.2 if you swap to a noisier odom source.
+    alpha1: 0.1     # rot from rot
+    alpha2: 0.1     # rot from trans
+    alpha3: 0.1     # trans from trans
+    alpha4: 0.1     # trans from rot
+    alpha5: 0.0     # strafing — Ackermann can't strafe; zero kills useless spread
+
+    # Particle filter sizing. Defaults (500/2000) are conservative; Pi 4
+    # comfortably handles 3000 and the extra hypothesis density helps in
+    # rooms with locally-ambiguous geometry. Bump max to 5000 in long
+    # featureless corridors where AMCL keeps losing lock.
+    min_particles: 800
+    max_particles: 3000
+
+    # Sensor model — likelihood_field is the modern default.
+    #   max_beams: LD19 publishes ~360 points/scan; 180 keeps half (every
+    #   other beam) — much better signal than the Nav2 default of 60 at
+    #   only modest CPU cost on Pi 4.
+    #   sigma_hit: tighter Gaussian → bigger weight gap between particles
+    #   that match the map well and ones that don't, so the filter
+    #   converges sharper.
+    #   z_hit/z_rand: trust real hits more, model random noise less.
+    laser_model_type: likelihood_field
+    laser_max_range: 5.0
+    laser_min_range: -1.0     # -1 = use sensor's own min
+    max_beams: 180
+    laser_likelihood_max_dist: 2.0
+    sigma_hit: 0.1
+    z_hit: 0.7
+    z_rand: 0.25
+    z_max: 0.05
+    z_short: 0.05
+    lambda_short: 0.1
+    do_beamskip: false
+
+    # Resample on smaller motion than Nav2 default (0.20/0.20). AMCL only
+    # reweights particles on motion, so coarse thresholds let weights go
+    # stale while the robot is actually moving — the filter visibly lags
+    # the true pose. Halving both costs negligible CPU and dramatically
+    # tightens tracking during ackermann motion.
+    update_min_d: 0.10        # m
+    update_min_a: 0.10        # rad (~5.7°)
+    resample_interval: 1
+
+    # Recovery from kidnapped-robot — leave at 0 unless you actually
+    # need it; enabling adds spurious particles around the room.
+    recovery_alpha_slow: 0.0
+    recovery_alpha_fast: 0.0
+
+    # Publish map→odom TF + save last estimate to disk periodically so a
+    # restart re-uses the last known pose as a prior. transform_tolerance
+    # matches the rest of the nav2 stack (0.3 s).
+    tf_broadcast: true
+    transform_tolerance: 0.3
+    save_pose_rate: 0.5
+
+    # Convergence / KLD sampling — Nav2 defaults are fine here.
+    pf_err: 0.05
+    pf_z: 0.99
+
+map_server:
+  ros__parameters:
+    use_sim_time: false
+    # Loaded from the launch file via `map_yaml` LaunchConfiguration so
+    # MAP=<name> picks the file.
+    yaml_filename: ""
