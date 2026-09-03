@@ -13,6 +13,11 @@ def generate_launch_description():
     # Custom navigate_through_poses BT — same as upstream w/recovery, with
     # the <Spin> node stripped (Ackermann can't spin in place).
     nav_through_poses_bt = str(bringup_share / 'config' / 'nav_through_poses_ackermann.xml')
+    # navigate_to_pose needs its own Ackermann-safe tree too: explore_lite uses
+    # this action, and the default one has no recovery at all — so a robot
+    # pinned by RPP's collision check aborts instead of backing up.
+    # Overridable so the stock (no-recovery) tree can be A/B tested against it.
+    default_to_pose_bt = str(bringup_share / 'config' / 'nav_to_pose_ackermann.xml')
     use_sim_time = LaunchConfiguration('use_sim_time')
 
     # Assumes bringup + cartographer are already running.
@@ -29,6 +34,7 @@ def generate_launch_description():
 
     return LaunchDescription([
         DeclareLaunchArgument('use_sim_time', default_value='false'),
+        DeclareLaunchArgument('nav_to_pose_bt', default_value=default_to_pose_bt),
 
         Node(
             package='nav2_controller',
@@ -61,6 +67,7 @@ def generate_launch_description():
             parameters=[nav2_yaml, {
                 'use_sim_time': use_sim_time,
                 'default_nav_through_poses_bt_xml': nav_through_poses_bt,
+                'default_nav_to_pose_bt_xml': LaunchConfiguration('nav_to_pose_bt'),
             }],
         ),
         Node(
