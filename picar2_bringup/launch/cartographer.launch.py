@@ -18,6 +18,7 @@ def _cartographer_node(context):
         '-configuration_directory', str(bringup_share / 'config'),
         '-configuration_basename', 'cartographer.lua',
     ]
+    use_sim_time = LaunchConfiguration('use_sim_time').perform(context).strip().lower() == 'true'
     load_state = LaunchConfiguration('load_state').perform(context).strip()
     load_frozen = LaunchConfiguration('load_frozen').perform(context).strip().lower()
     if load_state:
@@ -29,7 +30,7 @@ def _cartographer_node(context):
         executable='cartographer_node',
         name='cartographer_node',
         output='screen',
-        parameters=[{'use_sim_time': False}],
+        parameters=[{'use_sim_time': use_sim_time}],
         arguments=args,
         remappings=[('/imu', '/imu/data'), ('/scan', '/lidar_node/scan')],
     )]
@@ -37,6 +38,9 @@ def _cartographer_node(context):
 
 def generate_launch_description():
     return LaunchDescription([
+        # Gazebo publishes /clock; without this cartographer stamps against
+        # wall time and every scan looks stale. slam.launch.py already had it.
+        DeclareLaunchArgument('use_sim_time', default_value='false'),
         # Empty → fresh map. Path to a .pbstream → resume from it.
         DeclareLaunchArgument('load_state', default_value=''),
         # When loading state: 'true' = read-only (pure localization),
@@ -49,7 +53,7 @@ def generate_launch_description():
             name='cartographer_occupancy_grid_node',
             output='screen',
             parameters=[{
-                'use_sim_time': False,
+                'use_sim_time': LaunchConfiguration('use_sim_time'),
                 'resolution': 0.05,
                 'publish_period_sec': 1.0,
             }],
