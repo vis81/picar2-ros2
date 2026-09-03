@@ -20,7 +20,13 @@ def generate_launch_description():
                 'costmap_topic': '/global_costmap/costmap',
                 'costmap_updates_topic': '/global_costmap/costmap_updates',
                 'visualize': True,
-                'planner_frequency': 0.25,      # re-plan frontiers every 4 s
+                # 0.1, not 0.25: explore_lite sends a new goal whenever the
+                # frontier centroid moves >1 cm, and Nav2 is a single-goal
+                # server, so every re-plan preempts the current goal. At 4 s
+                # and 0.4 m/s the robot committed for ~1.6 m — barely one
+                # turning circle at a 0.5 m minimum radius — so it abandoned
+                # half-finished manoeuvres and swung elsewhere.
+                'planner_frequency': 0.1,       # re-plan frontiers every 10 s
                 'progress_timeout': 15.0,        # abandon frontier after 30 s of no progress
                 'potential_scale': 3.0,          # distance weight — reduced to avoid nearest-only bias
                 'gain_scale': 1.0,               # size weight — prefer large unexplored frontiers
