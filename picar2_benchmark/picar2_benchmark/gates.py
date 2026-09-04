@@ -37,6 +37,7 @@ class GateContext(Node):
         self.buf = Buffer()
         self.listener = TransformListener(self.buf, self)
         self.gt: Odometry | None = None
+        self.gt_seq = 0            # increments per /gt/odom message
         self.costmap: OccupancyGrid | None = None
         self.create_subscription(Odometry, '/gt/odom', self._on_gt, 20)
         self.create_subscription(OccupancyGrid, '/global_costmap/costmap',
@@ -45,6 +46,7 @@ class GateContext(Node):
 
     def _on_gt(self, m):
         self.gt = m
+        self.gt_seq += 1
 
     def _on_costmap(self, m):
         self.costmap = m

@@ -63,13 +63,17 @@ class Stack:
                 pass
         for _ in range(20):
             if not self._alive():
-                return
+                break
             time.sleep(0.5)
-        for g in self._alive():
-            try:
-                os.killpg(g, signal.SIGKILL)
-            except (ProcessLookupError, PermissionError):
-                pass
+        else:
+            for g in self._alive():
+                try:
+                    os.killpg(g, signal.SIGKILL)
+                except (ProcessLookupError, PermissionError):
+                    pass
+        # Settle on every path, not only after SIGKILL. Returning the instant
+        # the last process exits leaves DDS and the ros2 daemon still listing
+        # them, and the next trial's busy check then refuses to start.
         time.sleep(2)
 
 
@@ -98,6 +102,26 @@ def domain_is_busy() -> str | None:
     clashes = [n for n in r.stdout.split()
                if any(c in n for c in CONFLICTING_NODES)]
     return ', '.join(sorted(set(clashes))[:6]) if clashes else None
+
+
+def wait_for_quiet_domain(timeout: float = 45.0) -> str | None:
+    """Poll until no competing stack is visible, or give up and name it.
+
+    Checking once was too strict. The ros2 daemon caches discovery, so nodes
+    from the previous trial linger for seconds after their processes are gone.
+    That discarded 6 of 30 trials in an envelope run - and progressively more in
+    later arms, as a busier machine made the daemon lag further behind - even
+    though the domain was genuinely clear moments later. Waiting distinguishes
+    "a stack is running" from "the last one has not finished disappearing".
+    """
+    end = time.time() + timeout
+    while True:
+        busy = domain_is_busy()
+        if not busy:
+            return None
+        if time.time() >= end:
+            return busy
+        time.sleep(2.0)
 
 
 def reset_pose(sc, robot='picar2') -> None:
@@ -154,6 +178,10 @@ def _wait_topic(topic: str, timeout: float) -> bool:
     return False
 
 
+# Wall seconds with a frozen /clock before a trial is called degraded.
+SIM_CLOCK_TIMEOUT = 15.0
+
+
 class GoalRunner:
     """Sends one NavigateToPose goal and measures the outcome.
 
@@ -174,6 +202,7 @@ class GoalRunner:
         self.status = None
         self.path_m = 0.0
         self._last = None
+        self._gt_seq = -1
 
     def goal_in_map(self, goal, start) -> tuple[float, float, float]:
         """Express a scenario goal in whatever frame the robot is actually using.
@@ -223,7 +252,19 @@ class GoalRunner:
         m.pose.orientation.w = math.cos(p.yaw / 2)
         return m
 
+    def _sim_now(self) -> float:
+        return self.ctx.get_clock().now().nanoseconds * 1e-9
+
     def _accumulate(self):
+        # Once per ground-truth message, not once per spin. This loop polls far
+        # faster than /gt/odom publishes at 50 Hz, so re-reading the cache
+        # repeats a position while the sim clock advances -- indistinguishable
+        # from standing still. That made the stall detector report 10.9 s of
+        # stall in a 10.88 s trial while the controller was commanding motion
+        # 99.5% of the time, and inflated path_m with the same duplicates.
+        if self.ctx.gt_seq == self._gt_seq:
+            return
+        self._gt_seq = self.ctx.gt_seq
         x, y, yaw = self.ctx.gt_pose()
         if self._last is not None:
             self.path_m += math.dist(self._last, (x, y))
@@ -273,15 +314,37 @@ class GoalRunner:
         self.handle = gh
         result_fut = gh.get_result_async()
 
-        t0 = time.time()
+        # Measure in SIM time, not wall time. rtf is a target the simulator can
+        # miss under host load, so wall-clock results drift with machine load -
+        # exactly the uncontrolled variable trials are run serially to avoid.
+        # At rtf 0.5 the two differ by 2x, which is why a 21.75 s trial reported
+        # 10.9 s of recorder-measured stall: one inconsistency, not two bugs.
+        t0 = self._sim_now()
+        t0_wall = time.time()
+        last_sim, last_sim_wall = t0, t0_wall
         self._last = None
         sx, sy, _ = self.ctx.gt_pose()          # true start, for the detour ratio
-        while time.time() - t0 < self.timeout_s:
+        while True:
             rclpy.spin_once(self.ctx, timeout_sec=0.05)
             self._accumulate()
             if result_fut.done():
                 break
-        elapsed = time.time() - t0
+            now = self._sim_now()
+            # A pure sim-time timeout would hang forever if the simulator dies,
+            # because /clock simply stops - which is what a gazebo exit -2
+            # mid-trial looks like. Watch for a frozen clock instead of guessing
+            # a wall budget from rtf.
+            if now > last_sim:
+                last_sim, last_sim_wall = now, time.time()
+            elif time.time() - last_sim_wall > SIM_CLOCK_TIMEOUT:
+                gh.cancel_goal_async()
+                return {'outcome': 'SIM_DEGRADED',
+                        'detail': f'sim clock frozen for {SIM_CLOCK_TIMEOUT:.0f}s '
+                                  f'of wall time; the simulator died mid-trial'}
+            if now - t0 >= self.timeout_s:
+                break
+        elapsed = self._sim_now() - t0
+        wall = time.time() - t0_wall
 
         gx, gy, gyaw = self.ctx.gt_pose()
         dist_to_goal = math.dist((gx, gy), (goal.x, goal.y))
@@ -297,7 +360,12 @@ class GoalRunner:
                        GoalStatus.STATUS_ABORTED: 'ABORTED'}.get(st, f'STATUS_{st}')
         return {
             'outcome': outcome,
-            'time_s': round(elapsed, 2),
+            'time_s': round(elapsed, 2),                  # simulated seconds
+            'wall_time_s': round(wall, 2),
+            # Achieved real-time factor. The scenario pins a target; a large
+            # shortfall means the host could not keep up, so the trial ran under
+            # different conditions from its peers.
+            'rtf_achieved': round(elapsed / wall, 3) if wall > 0 else None,
             'gt_path_m': round(self.path_m, 2),
             'straight_line_m': round(math.dist((sx, sy), (goal.x, goal.y)), 2),
             'detour_ratio': round(self.path_m / max(math.dist((sx, sy), (goal.x, goal.y)), 1e-6), 3),
@@ -324,7 +392,7 @@ def run_trial(scenario: str, mode: str, out_dir: Path, gen_dir: Path,
     result: dict = {'scenario': sc.name, 'mode': mode, 'sensor_noise': sensor_noise,
                     'config': (Path(bt).stem if bt else
                                Path(overlay).stem if overlay else 'baseline')}
-    busy = domain_is_busy()
+    busy = wait_for_quiet_domain()
     if busy:
         return {**result, 'outcome': 'SIM_DEGRADED',
                 'detail': f'ROS_DOMAIN_ID={os.environ.get("ROS_DOMAIN_ID", "0")} '

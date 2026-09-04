@@ -245,6 +245,14 @@ class Recorder:
                 m['reversals_retracing'] = flipped
 
         if len(self.pose) > 2:
+            # One sample per /gt/odom message: GoalRunner._accumulate now
+            # drops re-reads of the cached pose, which otherwise repeat a
+            # position while the sim clock advances and score as zero
+            # speed. That reported 10.9 s of stall in a 10.88 s trial with
+            # the controller commanding motion 99.5% of the time; a repeat
+            # inside one clock tick also gave dt == 0, which `continue`
+            # skipped without closing the stall, fusing the run into one
+            # contiguous block (stall_count == 1 in all 30 trials).
             stalls, cur = [], 0.0
             for a, b in zip(self.pose, self.pose[1:]):
                 dt = b[0] - a[0]

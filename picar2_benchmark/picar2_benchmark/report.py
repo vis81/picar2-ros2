@@ -14,16 +14,28 @@ from collections import Counter
 from pathlib import Path
 
 METRICS = ['time_s', 'gt_path_m', 'detour_ratio', 'mean_speed_mps',
-           'final_xy_error_m', 'final_yaw_error_deg']
+           'final_xy_error_m', 'final_yaw_error_deg',
+           # hoisted out of the nested 'metrics' block by load()
+           'loc_error_mean_m', 'loc_error_max_m',
+           'loc_drift_mean_m', 'loc_drift_max_m',
+           'direction_reversals', 'stall_total_s',
+           'wall_time_s', 'rtf_achieved']
 
 
 def load(results_dir: str | Path) -> list[dict]:
     out = []
     for f in sorted(Path(results_dir).glob('*.json')):
         try:
-            out.append(json.loads(f.read_text()))
+            row = json.loads(f.read_text())
         except json.JSONDecodeError:
-            pass
+            continue
+        # Hoist the nested per-trial metrics so they can be summarised like any
+        # top-level field. Localisation error is the point of running the same
+        # scenario under three localisation backends, so it belongs in the
+        # report rather than only in the raw JSON.
+        for k, v in (row.get('metrics') or {}).items():
+            row.setdefault(k, v)
+        out.append(row)
     return out
 
 
