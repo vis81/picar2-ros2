@@ -369,7 +369,7 @@ def run_trial(scenario: str, mode: str, out_dir: Path, gen_dir: Path,
         except Exception as e:                               # noqa: BLE001
             result['effective'] = {'error': repr(e)}
 
-        rec = Recorder(ctx, sc.all_boxes)
+        rec = Recorder(ctx, sc.all_boxes, mode)
         ctx.spin(1.0)                       # let the subscriptions connect
         # only SLAM has to wait for the world to be observed
         warmup = 60.0 if mode == 'slam' else 0.0

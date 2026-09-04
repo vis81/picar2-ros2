@@ -74,14 +74,15 @@ def path_length(path: Path) -> float:
 class Recorder:
     """Subscribes on an existing node and accumulates a trial timeline."""
 
-    def __init__(self, node, boxes):
+    def __init__(self, node, boxes, mode: str = 'ground_truth'):
         self.node = node
+        self.mode = mode
         self.boxes = boxes
         self.bt: list[tuple[float, str, str]] = []      # t, node_name, status
         self.cmd: list[tuple[float, float, float]] = []  # t, vx, wz
         self.pose: list[tuple[float, float, float, float]] = []  # t, x, y, yaw
-        self.loc_error: list[float] = []
-        self._loc_origin: tuple | None = None
+        # (gt_x, gt_y, gt_yaw, believed_x, believed_y, believed_yaw)
+        self.loc_pairs: list[tuple] = []
         self.clearances: list[tuple[float, float]] = []
         self.plans: list[tuple[float, int, float]] = []   # t, cusps, length
         self.plan_curv: list[float] = []                 # 1/R asked for by the plan
@@ -129,41 +130,70 @@ class Recorder:
         t = self._t()
         self.pose.append((t, x, y, yaw))
         self.clearances.append((t, clearance((x, y, yaw), self.boxes)))
-        self._sample_loc_error(x, y)
+        self._sample_loc_error(x, y, yaw)
 
-    def _sample_loc_error(self, gx: float, gy: float) -> None:
-        """Ground truth vs what the robot believes, in the same frame.
+    def _sample_loc_error(self, gx: float, gy: float, gyaw: float) -> None:
+        """Ground truth vs what the robot believes, stored as pose pairs.
 
-        This is the number that separates a bad drive from a correct drive
-        to a mislocalised place - indistinguishable from the outcome alone,
-        and the reason ground truth is collected in every mode. Zero by
-        construction under ground_truth; the headline result under slam.
+        Reduced in metrics() two ways, because no single number is honest
+        in all three modes:
 
-        Both poses are taken relative to the run's own start, because
-        cartographer anchors `map` wherever the robot was when it
-        initialised: the frames share an orientation but not an origin.
+        loc_error - absolute distance between the poses. The real number
+        under ground_truth and amcl, where the map served to the stack IS
+        the world map, so a constant offset is genuine error. Meaningless
+        under slam: cartographer anchors `map` wherever the robot happened
+        to be at init, so the offset is arbitrary.
+
+        loc_drift - the residual after aligning the two trajectories with a
+        rigid SE(2) transform. The one quantity that means the same thing
+        in every mode, so it is what to compare across them.
+
+        The alignment must include rotation, not just translation: a yaw
+        offset in cartographer's map frame shows up as apparent position
+        error of roughly 2*r*sin(yaw/2), which is metres at r=3 m. Aligning
+        translation alone reported 1.24 m mean and 6.54 m max drift for a
+        slam run that finished 0.44 m from the goal - impossible, since Nav2
+        drives to the goal in the believed frame. Medians, not means, so one
+        bad sample during cartographer start-up cannot move the fit.
         """
         try:
             tf = self.node.buf.lookup_transform(
                 'map', 'base_footprint', rclpy.time.Time())
         except Exception:                                    # noqa: BLE001
             return
-        bx, by = tf.transform.translation.x, tf.transform.translation.y
-        if self._loc_origin is None:
-            self._loc_origin = ((gx, gy), (bx, by))
-            return
-        (g0x, g0y), (b0x, b0y) = self._loc_origin
-        self.loc_error.append(
-            math.hypot((gx - g0x) - (bx - b0x), (gy - g0y) - (by - b0y)))
+        t, q = tf.transform.translation, tf.transform.rotation
+        byaw = math.atan2(2 * (q.w * q.z + q.x * q.y),
+                          1 - 2 * (q.y * q.y + q.z * q.z))
+        self.loc_pairs.append((gx, gy, gyaw, t.x, t.y, byaw))
 
     # ── derived metrics ─────────────────────────────────────────────────
     def metrics(self) -> dict:
         m: dict = {}
-        if self.loc_error:
-            e = sorted(self.loc_error)
-            m['loc_error_mean_m'] = round(sum(e) / len(e), 3)
-            m['loc_error_p95_m'] = round(e[min(len(e) - 1, int(0.95 * len(e)))], 3)
-            m['loc_error_max_m'] = round(e[-1], 3)
+        if self.loc_pairs:
+            def _med(v):
+                v = sorted(v)
+                return v[len(v) // 2]
+            # robust SE(2) fit: median yaw offset, then median translation
+            dyaw = _med([math.atan2(math.sin(p[2] - p[5]), math.cos(p[2] - p[5]))
+                         for p in self.loc_pairs])
+            cs, sn = math.cos(dyaw), math.sin(dyaw)
+            rot = [(p[3] * cs - p[4] * sn, p[3] * sn + p[4] * cs)
+                   for p in self.loc_pairs]
+            tx = _med([p[0] - r[0] for p, r in zip(self.loc_pairs, rot)])
+            ty = _med([p[1] - r[1] for p, r in zip(self.loc_pairs, rot)])
+            series = {'loc_drift': [math.hypot(p[0] - (r[0] + tx),
+                                               p[1] - (r[1] + ty))
+                                    for p, r in zip(self.loc_pairs, rot)]}
+            if self.mode != 'slam':
+                series['loc_error'] = [math.hypot(p[0] - p[3], p[1] - p[4])
+                                       for p in self.loc_pairs]
+            m['loc_align_yaw_deg'] = round(math.degrees(dyaw), 2)
+            for label, vals in series.items():
+                e = sorted(vals)
+                m[f'{label}_mean_m'] = round(sum(e) / len(e), 3)
+                m[f'{label}_p95_m'] = round(
+                    e[min(len(e) - 1, int(0.95 * len(e)))], 3)
+                m[f'{label}_max_m'] = round(e[-1], 3)
         if self.cmd:
             moving = [c for c in self.cmd if abs(c[1]) > 0.02]
             m['cmd_samples'] = len(self.cmd)
