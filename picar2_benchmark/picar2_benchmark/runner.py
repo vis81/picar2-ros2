@@ -239,7 +239,7 @@ class GoalRunner:
 
 def run_trial(scenario: str, mode: str, out_dir: Path, gen_dir: Path,
               keep_up: bool = False, sensor_noise: float = 1.0,
-              overlay: str = '') -> dict:
+              overlay: str = '', bt: str = '') -> dict:
     sc = spec.load(scenario)
     gen = gen_dir / sc.name
     gen.mkdir(parents=True, exist_ok=True)
@@ -252,7 +252,8 @@ def run_trial(scenario: str, mode: str, out_dir: Path, gen_dir: Path,
     # failure before it could be attributed.
     logs = out_dir / 'logs' / f'{sc.name}_{mode}_{int(time.time())}'
     result: dict = {'scenario': sc.name, 'mode': mode, 'sensor_noise': sensor_noise,
-                    'config': Path(overlay).stem if overlay else 'baseline'}
+                    'config': (Path(bt).stem if bt else
+                               Path(overlay).stem if overlay else 'baseline')}
     busy = domain_is_busy()
     if busy:
         return {**result, 'outcome': 'SIM_DEGRADED',
@@ -275,7 +276,8 @@ def run_trial(scenario: str, mode: str, out_dir: Path, gen_dir: Path,
             logs / 'loc.log')
         stack.launch([
             'ros2', 'launch', 'picar2_bringup', 'nav2.launch.py', 'use_sim_time:=true']
-            + ([f'params_overlay:={overlay}'] if overlay else []),
+            + ([f'params_overlay:={overlay}'] if overlay else [])
+            + ([f'nav_to_pose_bt:={bt}'] if bt else []),
             logs / 'nav2.log')
 
         rclpy.init()
@@ -335,13 +337,15 @@ def main(argv=None) -> int:
                     help='scale simulated sensor noise; 0.0 isolates scheduling variance')
     ap.add_argument('--overlay', default='',
                     help='nav2 params overlay layered over nav2.yaml')
+    ap.add_argument('--bt', default='',
+                    help='navigate_to_pose behaviour tree XML (replan cadence)')
     ap.add_argument('--keep-up', action='store_true',
                     help='leave the stack running for inspection')
     a = ap.parse_args(argv)
     out = Path(a.out)
     out.mkdir(parents=True, exist_ok=True)
     res = run_trial(a.scenario, a.mode, out, Path('/tmp/picar2_bench'), a.keep_up,
-                    a.sensor_noise, a.overlay)
+                    a.sensor_noise, a.overlay, a.bt)
     name = (f"{res['scenario']}_{a.mode}_{res['config']}_"
             f"n{a.sensor_noise}_{int(time.time())}.json")
     (out / name).write_text(json.dumps(res, indent=2))

@@ -45,6 +45,25 @@ def path_cusps(path: Path) -> int:
     return sum(1 for a, b in zip(signs, signs[1:]) if a != b)
 
 
+def path_curvatures(path: Path) -> list[float]:
+    """Curvature (1/R) demanded at each triple of plan poses.
+
+    Compared against the executed |wz|/|vx|, this says whether the controller is
+    steering as hard as the plan asks. A plan full of 2.0 (the 0.5 m minimum
+    radius) executed at ~0 means the robot is shuffling, not turning.
+    """
+    p = [(q.pose.position.x, q.pose.position.y) for q in path.poses]
+    out = []
+    for a, b, c in zip(p, p[1:], p[2:]):
+        d1, d2, d3 = math.dist(a, b), math.dist(b, c), math.dist(a, c)
+        if d1 < 1e-6 or d2 < 1e-6 or d3 < 1e-6:
+            continue
+        # Menger curvature: 4 * triangle area / product of side lengths
+        area = abs((b[0] - a[0]) * (c[1] - a[1]) - (c[0] - a[0]) * (b[1] - a[1])) / 2
+        out.append(4 * area / (d1 * d2 * d3))
+    return out
+
+
 def path_length(path: Path) -> float:
     p = [(q.pose.position.x, q.pose.position.y) for q in path.poses]
     return sum(math.dist(p[i], p[i + 1]) for i in range(len(p) - 1))
@@ -61,6 +80,7 @@ class Recorder:
         self.pose: list[tuple[float, float, float, float]] = []  # t, x, y, yaw
         self.clearances: list[tuple[float, float]] = []
         self.plans: list[tuple[float, int, float]] = []   # t, cusps, length
+        self.plan_curv: list[float] = []                 # 1/R asked for by the plan
         self.pruned: list[tuple[float, int, float]] = []
         self.planner_status: list[int] = []
         self.controller_status: list[int] = []
@@ -89,6 +109,7 @@ class Recorder:
 
     def _on_plan(self, msg):
         self.plans.append((self._t(), path_cusps(msg), path_length(msg)))
+        self.plan_curv.extend(path_curvatures(msg))
 
     def _on_pruned(self, msg):
         self.pruned.append((self._t(), path_cusps(msg), path_length(msg)))
@@ -116,6 +137,48 @@ class Recorder:
                 100 * sum(1 for c in moving if c[1] < 0) / max(len(moving), 1), 1)
             signs = [1 if c[1] > 0.02 else -1 for c in self.cmd if abs(c[1]) > 0.02]
             m['direction_reversals'] = sum(1 for a, b in zip(signs, signs[1:]) if a != b)
+        # Steering behaviour. A car turning round in a confined space must
+        # alternate full lock with direction — hard one way in reverse, hard the
+        # other going forward. Shuffling back and forth near-straight changes
+        # position but gains almost no heading, so executed curvature is the
+        # measurement that distinguishes a real multi-point turn from a shuffle.
+        moving = [c for c in self.cmd if abs(c[1]) > 0.02]
+        if moving:
+            curv = [abs(c[2]) / abs(c[1]) for c in moving]      # |wz|/|vx| = 1/R
+            fwd = [abs(c[2]) for c in moving if c[1] > 0]
+            rev = [abs(c[2]) for c in moving if c[1] < 0]
+            m['exec_curvature_median'] = round(sorted(curv)[len(curv) // 2], 3)
+            m['exec_curvature_max'] = round(max(curv), 3)
+            # 1/R for the 0.5 m minimum turning radius is 2.0
+            m['pct_near_straight'] = round(
+                100 * sum(1 for c in curv if c < 0.5) / len(curv), 1)
+            m['pct_near_full_lock'] = round(
+                100 * sum(1 for c in curv if c > 1.5) / len(curv), 1)
+            if fwd:
+                m['mean_abs_wz_forward'] = round(sum(fwd) / len(fwd), 3)
+            if rev:
+                m['mean_abs_wz_reverse'] = round(sum(rev) / len(rev), 3)
+
+            # Steering alternation. yaw_rate = v*tan(delta)/L, so to keep turning
+            # the SAME way through a direction change the steering angle must
+            # flip — which shows up as wz keeping its sign while vx flips. If wz
+            # flips too, the steering did not alternate and the robot simply
+            # retraces the same arc: maximum motion, zero net rotation.
+            kept = flipped = 0
+            prev = None
+            for t, vx, wz in moving:
+                cur = (1 if vx > 0 else -1, 1 if wz > 0 else -1)
+                if prev is not None and cur[0] != prev[0]:      # direction changed
+                    if cur[1] == prev[1]:
+                        kept += 1        # steering alternated -> rotation accrues
+                    else:
+                        flipped += 1     # steering held -> arc retraced
+                prev = cur
+            if kept + flipped:
+                m['turn_alternation_pct'] = round(100 * kept / (kept + flipped), 1)
+                m['reversals_accruing_yaw'] = kept
+                m['reversals_retracing'] = flipped
+
         if len(self.pose) > 2:
             stalls, cur = [], 0.0
             for a, b in zip(self.pose, self.pose[1:]):
@@ -131,11 +194,54 @@ class Recorder:
             m['stall_count'] = len(stalls)
             m['stall_total_s'] = round(sum(stalls), 1)
             m['longest_stall_s'] = round(max(stalls), 1) if stalls else 0.0
+        # Achieved curvature from ground truth: d(yaw)/d(distance). Commanded
+        # |wz|/|vx| is what the controller *asks* for; if the steering saturates
+        # the robot turns less than that, and the visible result is shuffling
+        # back and forth without the heading actually coming round.
+        if len(self.pose) > 3:
+            # Accumulate over a 5 cm baseline rather than comparing adjacent
+            # samples: at ~0.1 m/s and ~20 Hz, consecutive poses are ~5 mm apart,
+            # so a per-sample threshold discarded every pair and the metric came
+            # out empty.
+            ach, dyaw_tot, dist_tot = [], 0.0, 0.0
+            anchor = self.pose[0]
+            acc_yaw = 0.0
+            for a, b in zip(self.pose, self.pose[1:]):
+                step = math.dist(a[1:3], b[1:3])
+                acc_yaw += abs(math.atan2(math.sin(b[3] - a[3]),
+                                          math.cos(b[3] - a[3])))
+                dist_tot += step
+                dyaw_tot += abs(math.atan2(math.sin(b[3] - a[3]),
+                                           math.cos(b[3] - a[3])))
+                span = math.dist(anchor[1:3], b[1:3])
+                if span >= 0.05:
+                    ach.append(acc_yaw / span)
+                    anchor, acc_yaw = b, 0.0
+            if ach:
+                ach.sort()
+                m['gt_curvature_median'] = round(ach[len(ach) // 2], 3)
+                m['gt_curvature_p90'] = round(ach[int(len(ach) * 0.9)], 3)
+                # total heading swept per metre driven: the honest summary of
+                # whether all that shuffling actually turned the robot round
+                m['yaw_swept_deg_per_m'] = round(math.degrees(dyaw_tot) / dist_tot, 1)
+                # net heading achieved vs total heading churned through: near 1
+                # means every degree of rotation counted, near 0 means the robot
+                # rotated one way then straight back again
+                net = abs(math.atan2(math.sin(self.pose[-1][3] - self.pose[0][3]),
+                                     math.cos(self.pose[-1][3] - self.pose[0][3])))
+                m['yaw_net_deg'] = round(math.degrees(net), 1)
+                m['yaw_abs_deg'] = round(math.degrees(dyaw_tot), 1)
+                m['yaw_efficiency'] = round(net / dyaw_tot, 3) if dyaw_tot > 0 else None
+
         if self.clearances:
             vals = [c for _, c in self.clearances]
             m['min_clearance_m'] = round(min(vals), 3)
             m['time_below_5cm_s'] = round(sum(
                 1 for v in vals if v < 0.05) * 0.05, 1)
+        if self.plan_curv:
+            c = sorted(self.plan_curv)
+            m['plan_curvature_median'] = round(c[len(c) // 2], 3)
+            m['plan_curvature_max'] = round(c[-1], 3)
         if self.plans:
             m['plans_received'] = len(self.plans)
             m['first_plan_cusps'] = self.plans[0][1]
