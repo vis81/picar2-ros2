@@ -19,6 +19,11 @@ def generate_launch_description():
     # Overridable so the stock (no-recovery) tree can be A/B tested against it.
     default_to_pose_bt = str(bringup_share / 'config' / 'nav_to_pose_ackermann.xml')
     use_sim_time = LaunchConfiguration('use_sim_time')
+    # Appended *after* nav2.yaml in every parameters=[...] list, so later values
+    # win at the leaf level. This keeps nav2.yaml the single source of truth and
+    # makes a config variant a ~10-line overlay instead of a forked 234-line
+    # file that silently drifts. Defaults to an empty overlay = no change.
+    params_overlay = LaunchConfiguration('params_overlay')
 
     # Assumes bringup + cartographer are already running.
     # Nav2 subscribes to /map (from cartographer), /odom and TF (from EKF),
@@ -35,36 +40,40 @@ def generate_launch_description():
     return LaunchDescription([
         DeclareLaunchArgument('use_sim_time', default_value='false'),
         DeclareLaunchArgument('nav_to_pose_bt', default_value=default_to_pose_bt),
+        DeclareLaunchArgument(
+            'params_overlay',
+            default_value=str(bringup_share / 'config' / 'nav2_overlay_empty.yaml'),
+            description='extra params file layered over nav2.yaml (later wins)'),
 
         Node(
             package='nav2_controller',
             executable='controller_server',
             output='screen',
-            parameters=[nav2_yaml, {'use_sim_time': use_sim_time}],
+            parameters=[nav2_yaml, params_overlay, {'use_sim_time': use_sim_time}],
         ),
         Node(
             package='nav2_planner',
             executable='planner_server',
             output='screen',
-            parameters=[nav2_yaml, {'use_sim_time': use_sim_time}],
+            parameters=[nav2_yaml, params_overlay, {'use_sim_time': use_sim_time}],
         ),
         Node(
             package='nav2_behaviors',
             executable='behavior_server',
             output='screen',
-            parameters=[nav2_yaml, {'use_sim_time': use_sim_time}],
+            parameters=[nav2_yaml, params_overlay, {'use_sim_time': use_sim_time}],
         ),
         Node(
             package='nav2_smoother',
             executable='smoother_server',
             output='screen',
-            parameters=[nav2_yaml, {'use_sim_time': use_sim_time}],
+            parameters=[nav2_yaml, params_overlay, {'use_sim_time': use_sim_time}],
         ),
         Node(
             package='nav2_bt_navigator',
             executable='bt_navigator',
             output='screen',
-            parameters=[nav2_yaml, {
+            parameters=[nav2_yaml, params_overlay, {
                 'use_sim_time': use_sim_time,
                 'default_nav_through_poses_bt_xml': nav_through_poses_bt,
                 'default_nav_to_pose_bt_xml': LaunchConfiguration('nav_to_pose_bt'),
@@ -74,7 +83,7 @@ def generate_launch_description():
             package='nav2_waypoint_follower',
             executable='waypoint_follower',
             output='screen',
-            parameters=[nav2_yaml, {'use_sim_time': use_sim_time}],
+            parameters=[nav2_yaml, params_overlay, {'use_sim_time': use_sim_time}],
         ),
         Node(
             package='nav2_lifecycle_manager',

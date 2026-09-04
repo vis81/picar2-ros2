@@ -23,6 +23,15 @@ def generate_launch_description():
                                         description='Robot spawn X position')
     spawn_y_arg = DeclareLaunchArgument('spawn_y', default_value='0',
                                         description='Robot spawn Y position')
+    sensor_noise_arg = DeclareLaunchArgument(
+        'sensor_noise', default_value='1.0',
+        description='Scales all simulated sensor noise; 0.0 = noiseless')
+    spawn_yaw_arg = DeclareLaunchArgument('spawn_yaw', default_value='0',
+                                          description='Robot spawn yaw, radians')
+    # 0.05 was hardcoded; a 5 cm drop is a settling transient with randomised
+    # contact resolution right where a benchmark run starts its clock.
+    spawn_z_arg = DeclareLaunchArgument('spawn_z', default_value='0.05',
+                                        description='Robot spawn Z height')
     lidar_arg = DeclareLaunchArgument('lidar', default_value='ld19',
                                       description='Lidar model: ld19 | lds02rr | none')
     use_mag_arg = DeclareLaunchArgument('use_mag', default_value='false',
@@ -39,6 +48,7 @@ def generate_launch_description():
             'xacro ', str(desc_share / 'urdf' / 'picar2.urdf.xacro'),
             ' use_sim:=true',
             ' lidar:=', LaunchConfiguration('lidar'),
+            ' sensor_noise:=', LaunchConfiguration('sensor_noise'),
         ]),
         value_type=str)
 
@@ -65,7 +75,8 @@ def generate_launch_description():
             '-topic', 'robot_description',
             '-x',     LaunchConfiguration('spawn_x'),
             '-y',     LaunchConfiguration('spawn_y'),
-            '-z',     '0.05',
+            '-z',     LaunchConfiguration('spawn_z'),
+            '-Y',     LaunchConfiguration('spawn_yaw'),
         ],
         output='screen',
     )
@@ -166,6 +177,9 @@ def generate_launch_description():
         world_arg,
         spawn_x_arg,
         spawn_y_arg,
+        spawn_yaw_arg,
+        spawn_z_arg,
+        sensor_noise_arg,
         lidar_arg,
         headless_arg,
         use_mag_arg,

@@ -1,0 +1,8 @@
+# Default overlay for nav2.launch.py: intentionally inert.
+#
+# nav2.launch.py layers params_overlay after nav2.yaml, so a benchmark config
+# is a short file listing only what it changes. This one changes nothing, which
+# keeps the default launch behaviour byte-identical to before the argument
+# existed. The /** wildcard matches every node and declares no parameters.
+/**:
+  ros__parameters: {}

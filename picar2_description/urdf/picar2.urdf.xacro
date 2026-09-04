@@ -5,6 +5,13 @@
   <xacro:arg name="baud"    default="460800"/>
   <xacro:arg name="use_sim" default="false"/>
   <xacro:arg name="lidar"   default="lds02rr"/>
+  <!-- Scales every simulated sensor noise stddev. Gazebo Harmonic exposes no
+       RNG seed, so sensor noise is the one source of run-to-run variance that
+       cannot be seeded away. sensor_noise:=0.0 removes it entirely, which turns
+       "how repeatable is this benchmark?" into two measurable questions:
+       variance from physics/sensing vs variance from scheduling. -->
+  <xacro:arg name="sensor_noise" default="1.0"/>
+  <xacro:property name="noise_scale" value="$(arg sensor_noise)"/>
   <xacro:property name="lidar_model"    value="$(arg lidar)"/>
   <xacro:property name="ld07_tilt_rad"  value="0.2793"/>  <!-- 16° mount angle -->
 
@@ -91,6 +98,21 @@
       <plugin filename="gz_ros2_control-system"
               name="gz_ros2_control::GazeboSimROS2ControlPlugin">
         <parameters>$(find picar2_bringup)/config/controllers.yaml</parameters>
+      </plugin>
+      <!-- Ground-truth pose for the navigation benchmark. Simulation only, so
+           the real robot is unaffected. This exists because the ground truth
+           cannot be obtained from /world/<w>/pose/info: the entity name lives
+           in pose.name, while the ros_gz Pose_V->TFMessage converter reads
+           header.data, so every bridged transform comes out with an empty
+           frame_id. A model-side odometry publisher names its frames
+           explicitly instead. -->
+      <plugin filename="gz-sim-odometry-publisher-system"
+              name="gz::sim::systems::OdometryPublisher">
+        <odom_frame>gt_odom</odom_frame>
+        <robot_base_frame>base_footprint</robot_base_frame>
+        <odom_publish_frequency>50</odom_publish_frequency>
+        <odom_topic>model/picar2/gt_odom</odom_topic>
+        <dimensions>3</dimensions>
       </plugin>
     </gazebo>
   </xacro:if>
@@ -458,14 +480,14 @@
       <gz_frame_id>imu_link</gz_frame_id>
       <imu>
         <angular_velocity>
-          <x><noise type="gaussian"><mean>0</mean><stddev>0.009</stddev></noise></x>
-          <y><noise type="gaussian"><mean>0</mean><stddev>0.009</stddev></noise></y>
-          <z><noise type="gaussian"><mean>0</mean><stddev>0.009</stddev></noise></z>
+          <x><noise type="gaussian"><mean>0</mean><stddev>${0.009 * noise_scale}</stddev></noise></x>
+          <y><noise type="gaussian"><mean>0</mean><stddev>${0.009 * noise_scale}</stddev></noise></y>
+          <z><noise type="gaussian"><mean>0</mean><stddev>${0.009 * noise_scale}</stddev></noise></z>
         </angular_velocity>
         <linear_acceleration>
-          <x><noise type="gaussian"><mean>0</mean><stddev>0.021</stddev></noise></x>
-          <y><noise type="gaussian"><mean>0</mean><stddev>0.021</stddev></noise></y>
-          <z><noise type="gaussian"><mean>0</mean><stddev>0.021</stddev></noise></z>
+          <x><noise type="gaussian"><mean>0</mean><stddev>${0.021 * noise_scale}</stddev></noise></x>
+          <y><noise type="gaussian"><mean>0</mean><stddev>${0.021 * noise_scale}</stddev></noise></y>
+          <z><noise type="gaussian"><mean>0</mean><stddev>${0.021 * noise_scale}</stddev></noise></z>
         </linear_acceleration>
       </imu>
     </sensor>
@@ -479,9 +501,9 @@
       <topic>/model/picar2/mag</topic>
       <gz_frame_id>imu_link</gz_frame_id>
       <magnetometer>
-        <x><noise type="gaussian"><mean>0.0</mean><stddev>0.0001</stddev></noise></x>
-        <y><noise type="gaussian"><mean>0.0</mean><stddev>0.0001</stddev></noise></y>
-        <z><noise type="gaussian"><mean>0.0</mean><stddev>0.0001</stddev></noise></z>
+        <x><noise type="gaussian"><mean>0.0</mean><stddev>${0.0001 * noise_scale}</stddev></noise></x>
+        <y><noise type="gaussian"><mean>0.0</mean><stddev>${0.0001 * noise_scale}</stddev></noise></y>
+        <z><noise type="gaussian"><mean>0.0</mean><stddev>${0.0001 * noise_scale}</stddev></noise></z>
       </magnetometer>
     </sensor>
   </gazebo>
@@ -506,7 +528,7 @@
         <noise>
           <type>gaussian</type>
           <mean>0.0</mean>
-          <stddev>0.005</stddev>
+          <stddev>${0.005 * noise_scale}</stddev>
         </noise>
       </camera>
     </sensor>
@@ -535,7 +557,7 @@
         </range>
         <noise type="gaussian">
           <mean>0.0</mean>
-          <stddev>0.002</stddev>
+          <stddev>${0.002 * noise_scale}</stddev>
         </noise>
       </lidar>
     </sensor>
@@ -564,7 +586,7 @@
         </range>
         <noise type="gaussian">
           <mean>0.0</mean>
-          <stddev>0.01</stddev>
+          <stddev>${0.01 * noise_scale}</stddev>
         </noise>
       </lidar>
     </sensor>
