@@ -12,12 +12,28 @@ def generate_launch_description():
     nav2_yaml = str(bringup_share / 'config' / 'nav2.yaml')
     # Custom navigate_through_poses BT — same as upstream w/recovery, with
     # the <Spin> node stripped (Ackermann can't spin in place).
-    nav_through_poses_bt = str(bringup_share / 'config' / 'nav_through_poses_ackermann.xml')
+    #
+    # The _speed variant for the same reason as navigate_to_pose below, and it
+    # matters more here: the clock-based tree replans every 3 s, slower than the
+    # 1 Hz that produced the shuffling in the first place. Waypoint following
+    # (loop_waypoints.py, the RViz Nav2 panel) uses this action, so it would
+    # otherwise still shuffle in tight spaces after the to_pose tree was fixed.
+    default_through_poses_bt = str(
+        bringup_share / 'config' / 'nav_through_poses_speed.xml')
     # navigate_to_pose needs its own Ackermann-safe tree too: explore_lite uses
     # this action, and the default one has no recovery at all — so a robot
     # pinned by RPP's collision check aborts instead of backing up.
     # Overridable so the stock (no-recovery) tree can be A/B tested against it.
-    default_to_pose_bt = str(bringup_share / 'config' / 'nav_to_pose_ackermann.xml')
+    #
+    # The _speed variant swaps RateController(1 Hz) for a SpeedController. A
+    # fixed 1 Hz replan is what makes the car shuffle in tight spaces: a fresh
+    # Reeds-Shepp plan computed from inside a pocket tends to open with a leg
+    # opposite the one just driven, so the robot commits ~0.1 m and reverses,
+    # indefinitely. Measured in sim (dead_end_reverse, n=3): median leg length
+    # 0.15 m -> 0.30-0.94 m, reversals 69/77/91 -> 5/15/23, time 87.8 s ->
+    # 61.8 s. SpeedController still replans at 1 Hz at speed, so high-speed
+    # obstacle response is unchanged (verified: 12/12 clean in open driving).
+    default_to_pose_bt = str(bringup_share / 'config' / 'nav_to_pose_speed.xml')
     use_sim_time = LaunchConfiguration('use_sim_time')
     # Appended *after* nav2.yaml in every parameters=[...] list, so later values
     # win at the leaf level. This keeps nav2.yaml the single source of truth and
@@ -40,6 +56,8 @@ def generate_launch_description():
     return LaunchDescription([
         DeclareLaunchArgument('use_sim_time', default_value='false'),
         DeclareLaunchArgument('nav_to_pose_bt', default_value=default_to_pose_bt),
+        DeclareLaunchArgument('nav_through_poses_bt',
+                              default_value=default_through_poses_bt),
         DeclareLaunchArgument(
             'params_overlay',
             default_value=str(bringup_share / 'config' / 'nav2_overlay_empty.yaml'),
@@ -75,7 +93,8 @@ def generate_launch_description():
             output='screen',
             parameters=[nav2_yaml, params_overlay, {
                 'use_sim_time': use_sim_time,
-                'default_nav_through_poses_bt_xml': nav_through_poses_bt,
+                'default_nav_through_poses_bt_xml':
+                    LaunchConfiguration('nav_through_poses_bt'),
                 'default_nav_to_pose_bt_xml': LaunchConfiguration('nav_to_pose_bt'),
             }],
         ),
