@@ -43,12 +43,16 @@ def generate_launch_description():
                 'switch_margin': 1.5,
                 'useful_radius': 1.0,
                 'arrive_radius': 0.4,
-                'stuck_seconds': 25.0,
-                'stuck_distance': 0.2,
+                'stuck_seconds': 20.0,
+                'stuck_distance': 0.6,
                 'futile_distance': 0.15,
                 'verify_top_k': 3,
                 'blacklist_seconds': 45.0,
                 'blacklist_radius': 0.5,
+                # after this many frontiers fail without the robot moving,
+                # drive to open space instead of trying another frontier
+                'escape_after': 3,
+                'escape_radius': 4.0,
             }],
         ),
 

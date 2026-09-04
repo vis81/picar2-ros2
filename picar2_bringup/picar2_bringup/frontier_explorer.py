@@ -83,16 +83,20 @@ class FrontierExplorer(Node):
             ("turn_radius", 0.5),        # minimum turning radius, for scoring
             ("turn_weight", 1.0),        # how much a required turn costs vs metres
             ("gain_weight", 2.0),        # reward per metre of frontier size
+            ("gain_cap", 2.0),           # ...but cap it; see _heuristic
             ("commit_seconds", 10.0),    # min time on a goal before reconsidering
             ("switch_margin", 1.5),      # metres of path a rival must beat it by
+            ("continuity_weight", 0.0),  # bias towards frontiers near the last goal
             ("useful_radius", 1.0),      # goal is pointless once no unknown is this close
             ("arrive_radius", 0.4),      # close enough — don't chase the goal heading
-            ("stuck_seconds", 25.0),     # no progress for this long = give up on it
-            ("stuck_distance", 0.2),     # ...where progress means moving this far
+            ("stuck_seconds", 20.0),     # no progress for this long = give up on it
+            ("stuck_distance", 0.6),     # ...where progress means net displacement
             ("futile_distance", 0.15),   # a goal that moved us less than this bought nothing
             ("verify_top_k", 3),         # candidates costed with the real planner
             ("blacklist_seconds", 45.0), # failures expire rather than being forever
             ("blacklist_radius", 0.5),
+            ("escape_after", 0),         # failed frontiers in a row before escaping (0 = off)
+            ("escape_radius", 4.0),      # how far to look for open space
         ])
         self.cfg = {d.name: d.value for d in p}
 
@@ -122,6 +126,8 @@ class FrontierExplorer(Node):
         self.goal_started = 0.0
         self._preempting = False
         self._fail_count: dict[tuple[int, int], int] = {}
+        self._last_goal: tuple[float, float] | None = None
+        self._no_progress_streak = 0
         self._sent_from: tuple[float, float] | None = None
         self._last_xy = (0.0, 0.0)
         self._track: list[tuple[float, float, float]] = []   # t, x, y
@@ -183,7 +189,7 @@ class FrontierExplorer(Node):
             self.status_pub.publish(ExploreStatus(status=s))
 
     # ── frontier extraction ──────────────────────────────────────────────
-    def _frontiers(self) -> list[Frontier]:
+    def _frontiers(self, robot=None) -> list[Frontier]:
         g = self.grid
         w, h, res = g.info.width, g.info.height, g.info.resolution
         ox, oy = g.info.origin.position.x, g.info.origin.position.y
@@ -212,17 +218,22 @@ class FrontierExplorer(Node):
                 continue
             cx = ox + (xs.mean() + 0.5) * res
             cy = oy + (ys.mean() + 0.5) * res
-            if self._blacklisted(cx, cy):
-                continue
-            goal = self._goal_for(a, xs, ys, ox, oy, res, w, h)
-            if goal is None:
+            goal = self._goal_for(a, xs, ys, ox, oy, res, w, h, robot)
+            if goal is None or self._blacklisted(goal[0], goal[1]):
                 continue
             out.append(Frontier(len(ys), (cx, cy), goal, len(ys) * res))
         return out
 
     @staticmethod
     def _clusters(mask):
-        """4-connected components, walking only the set cells.
+        """8-connected components, walking only the set cells.
+
+        8-connected, not 4: in cluttered space the free/unknown boundary
+        alternates between free and inflated cells, which shatters a
+        4-connected frontier into fragments of a few cells each. They then all
+        fall below min_frontier_size and the robot concludes there is nothing
+        left to explore. Measured in the confined test world: 223 boundary
+        cells became 75 clusters of at most 5 cells, and every one was rejected.
 
         Scanning every cell of a 400x400 costmap in Python costs more than the
         whole rest of the cycle; frontier cells are a few hundred at most.
@@ -234,14 +245,16 @@ class FrontierExplorer(Node):
             cells = list(stack)
             while stack:
                 y, x = stack.pop()
-                for n in ((y + 1, x), (y - 1, x), (y, x + 1), (y, x - 1)):
+                for n in ((y + 1, x), (y - 1, x), (y, x + 1), (y, x - 1),
+                          (y + 1, x + 1), (y + 1, x - 1),
+                          (y - 1, x + 1), (y - 1, x - 1)):
                     if n in todo:
                         todo.discard(n)
                         cells.append(n)
                         stack.append(n)
             yield cells
 
-    def _goal_for(self, a, xs, ys, ox, oy, res, w, h):
+    def _goal_for(self, a, xs, ys, ox, oy, res, w, h, robot=None):
         """Aim at the frontier cell with the most clearance, facing the unknown.
 
         Every frontier cell is free by construction, so one is always drivable;
@@ -250,8 +263,19 @@ class FrontierExplorer(Node):
         already standing there, so the goal lands behind it, Nav2 reports
         success without moving, and the frontier is never consumed.
         """
+        # Tie-break towards the robot, not the cluster centroid. With
+        # 8-connectivity a large open area's whole frontier is one ring, and a
+        # ring's centroid sits in the middle of the map — nowhere near any of
+        # its cells — so centroid tie-breaking picks an arbitrary point on the
+        # ring and the robot crosses the map for no reason.
         costs = a[ys, xs]
-        order = np.lexsort((np.abs(xs - xs.mean()) + np.abs(ys - ys.mean()), costs))
+        if robot is not None:
+            rx = (robot[0] - ox) / res
+            ry = (robot[1] - oy) / res
+            near = np.abs(xs - rx) + np.abs(ys - ry)
+        else:
+            near = np.abs(xs - xs.mean()) + np.abs(ys - ys.mean())
+        order = np.lexsort((near, costs))
         cx_i, cy_i = int(xs[order[0]]), int(ys[order[0]])
         # direction from the frontier into unknown space, from the local window
         y0, y1 = max(0, cy_i - 6), min(h, cy_i + 7)
@@ -277,7 +301,18 @@ class FrontierExplorer(Node):
         # what the car must turn to set off towards it, and to arrive facing right
         turn = abs(wrap(bearing - ryaw)) + abs(wrap(gyaw - bearing))
         turn_cost = self.cfg["turn_weight"] * self.cfg["turn_radius"] * turn
-        return d + turn_cost - self.cfg["gain_weight"] * f.size_m
+        # Cap the size reward. Frontier clusters vary by two orders of
+        # magnitude, and an uncapped reward makes one huge cluster outscore
+        # every nearby option no matter how far away it is.
+        gain = self.cfg["gain_weight"] * min(f.size_m, self.cfg["gain_cap"])
+        score = d + turn_cost - gain
+        # Prefer frontiers near the one we just worked on, so a region gets
+        # finished before the robot crosses the map for a marginally better
+        # score and later has to come back — the "keeps re-covering the same
+        # area" complaint is the symptom of that thrashing.
+        if self._last_goal is not None and self.cfg["continuity_weight"] > 0.0:
+            score += self.cfg["continuity_weight"] * math.dist(f.goal[:2], self._last_goal)
+        return score
 
     def _plan_length(self, goal) -> float | None:
         """True path cost from the planner that will actually drive it."""
@@ -349,6 +384,7 @@ class FrontierExplorer(Node):
         g = NavigateToPose.Goal()
         g.pose = self._pose(f.goal)
         self.current = f
+        self._last_goal = f.goal[:2]
         self.goal_started = time.monotonic()
         self._sent_from = self._last_xy
         self._preempting = False
@@ -378,9 +414,10 @@ class FrontierExplorer(Node):
             if moved < self.cfg["futile_distance"]:
                 self.get_logger().info(
                     f"goal succeeded without moving ({moved:.2f}m) — suppressing it")
-                self._blacklist(*f.centroid, escalate=False)
+                self._blacklist(*f.goal[:2], escalate=False)
             else:
                 self.get_logger().info(f"goal reached, moved {moved:.2f}m")
+            self._no_progress_streak = 0
             return
         # A goal we replaced comes back ABORTED, not CANCELED — bt_navigator
         # reports a preempted goal as a failure. Blacklisting on that is what
@@ -388,7 +425,46 @@ class FrontierExplorer(Node):
         if res.status == GoalStatus.STATUS_CANCELED or self._preempting:
             self._preempting = False
             return
-        self._blacklist(*f.centroid)
+        self._blacklist(*f.goal[:2])
+
+    def _escape_goal(self, robot):
+        """The roomiest reachable spot nearby — used when frontiers stop working.
+
+        A pinned robot fails every frontier for the same reason, so trying yet
+        another one is pointless; what it needs is somewhere with space around
+        it. Inflation cost is already a proxy for distance-to-obstacle, so the
+        cheapest cell within reach is the roomiest one.
+        """
+        g = self.grid
+        res, w, h = g.info.resolution, g.info.width, g.info.height
+        ox, oy = g.info.origin.position.x, g.info.origin.position.y
+        a = np.frombuffer(bytes(g.data), dtype=np.int8).reshape(h, w).astype(np.int16)
+        rx = int((robot[0] - ox) / res)
+        ry = int((robot[1] - oy) / res)
+        r = int(self.cfg["escape_radius"] / res)
+        y0, y1 = max(0, ry - r), min(h, ry + r + 1)
+        x0, x1 = max(0, rx - r), min(w, rx + r + 1)
+        win = a[y0:y1, x0:x1]
+        ys, xs = np.nonzero((win >= 0) & (win <= self.cfg["free_threshold"]))
+        if len(ys) == 0:
+            return None
+        gx = xs + x0
+        gy = ys + y0
+        # measure to the cell centre, which is what we actually return, or a
+        # goal can come back marginally inside min_goal_distance
+        wx = ox + (gx + 0.5) * res
+        wy = oy + (gy + 0.5) * res
+        dist = np.hypot(wx - robot[0], wy - robot[1])
+        ok = dist >= self.cfg["min_goal_distance"]
+        if not ok.any():
+            return None
+        gx, gy, wx, wy, dist = gx[ok], gy[ok], wx[ok], wy[ok], dist[ok]
+        cost = a[gy, gx]
+        # cheapest cell wins; among equally roomy cells take the nearest, since
+        # a pinned robot has to actually reach it
+        best = np.lexsort((dist, cost))[0]
+        bx, by = float(wx[best]), float(wy[best])
+        return (bx, by, math.atan2(by - robot[1], bx - robot[0]))
 
     def _stuck(self, robot) -> bool:
         """True when the robot has been shuffling on the spot.
@@ -397,11 +473,23 @@ class FrontierExplorer(Node):
         outside we can see it is getting nowhere and spend the time on a
         different frontier instead.
         """
-        if len(self._track) < 4 or self._track[0][0] > self.goal_started:
-            return False              # not enough history on this goal yet
-        xs = [p[1] for p in self._track]
-        ys = [p[2] for p in self._track]
-        span = math.hypot(max(xs) - min(xs), max(ys) - min(ys))
+        # Judge the *current* goal only, and only once it has had its full
+        # window. The history is global (it must be, or goals that succeed
+        # instantly would wipe it), so without this check every freshly sent
+        # goal inherits the previous goal's stationary samples and is condemned
+        # within a second or two — the robot then churns through frontiers
+        # without ever being given time to drive to one.
+        now = time.monotonic()
+        if now - self.goal_started < self.cfg["stuck_seconds"]:
+            return False
+        pts = [p for p in self._track if p[0] >= self.goal_started]
+        if len(pts) < 4:
+            return False
+        # Net displacement, not path length. Nav2's recovery loop (abort ->
+        # BackUp -> clear costmap -> retry the same goal) drives the robot
+        # metres back and forth inside a small box, which any path-based test
+        # reads as healthy progress. Only where it ended up matters.
+        span = max(math.dist(pts[0][1:], p[1:]) for p in pts)
         return span < self.cfg["stuck_distance"]
 
     def _still_useful(self, f: Frontier) -> bool:
@@ -439,7 +527,21 @@ class FrontierExplorer(Node):
         self._track.append((now, robot[0], robot[1]))
         self._track = [p for p in self._track if p[0] >= now - self.cfg["stuck_seconds"]]
 
-        cands = self._frontiers()
+        # A robot that is pinned fails every frontier for the same reason, so
+        # trying another one achieves nothing — get it into open space first.
+        if (self.cfg["escape_after"] > 0
+                and self._no_progress_streak >= self.cfg["escape_after"]
+                and self.current is None):
+            esc = self._escape_goal(robot)
+            if esc is not None:
+                self.get_logger().warn(
+                    f"{self._no_progress_streak} frontiers failed without moving — "
+                    f"escaping to open space at ({esc[0]:.2f},{esc[1]:.2f})")
+                self._no_progress_streak = 0
+                self._send(Frontier(0, esc[:2], esc, 0.0))
+                return
+
+        cands = self._frontiers(robot)
         self._markers(cands)
         if not cands:
             if self.blacklist:        # suppressed, not exhausted — they come back
@@ -463,16 +565,29 @@ class FrontierExplorer(Node):
                 # insisting on it means shuffling back and forth to shave off
                 # the last few degrees.
                 self.get_logger().info(f"arrived within {near:.2f}m — next frontier")
+                self._no_progress_streak = 0
                 self._cancel_goal()
             elif self._stuck(robot):
-                self.get_logger().info("no progress — abandoning this frontier")
-                self._blacklist(*self.current.centroid)
+                self._no_progress_streak += 1
+                self.get_logger().info(
+                    f"no progress — abandoning this frontier "
+                    f"({self._no_progress_streak} in a row)")
+                self._blacklist(*self.current.goal[:2])
                 self._cancel_goal()
+                # cands was built before this ban, so it still contains the
+                # frontier we just gave up on — recompute next cycle instead
+                # of picking it straight back up
+                return
+            elif time.monotonic() - self.goal_started < self.cfg["commit_seconds"]:
+                # Held deliberately, even once the goal stops being useful.
+                # A long-range lidar reveals the space around a frontier while
+                # we are still driving to it, so an eager usefulness test
+                # cancels nearly every goal within seconds — and each cancel
+                # costs a fresh plan, during which the robot simply stands still.
+                return
             elif not self._still_useful(self.current):
                 self.get_logger().info("current goal no longer faces unknown space")
                 self._cancel_goal()
-            elif time.monotonic() - self.goal_started < self.cfg["commit_seconds"]:
-                return
 
         # A goal we have already reached makes Nav2 report instant success
         # without moving, and the frontier then survives to be chosen again
@@ -480,7 +595,7 @@ class FrontierExplorer(Node):
         near = [f for f in cands
                 if math.dist(f.goal[:2], robot[:2]) < self.cfg["min_goal_distance"]]
         for f in near:
-            self._blacklist(*f.centroid, escalate=False)
+            self._blacklist(*f.goal[:2], escalate=False)
         cands = [f for f in cands if f not in near]
         if not cands:
             self.get_logger().info("only frontiers we already stand on",
