@@ -223,12 +223,12 @@ global_costmap:
           max_obstacle_height: 2.0
       inflation_layer:
         plugin: nav2_costmap_2d::InflationLayer
-        cost_scaling_factor: 5.0
+        cost_scaling_factor: 10.0
         # 0.25, not 0.5: the robot is 0.19 m wide (inscribed radius ~0.095), so
         # 0.5 m of inflation sealed every doorway — 0.5 m from each side covers
         # 1.0 m of a 0.76 m gap. That left no cost-0 corridor through doors,
         # which stranded explore_lite: its frontier search only traverses cells
         # of exactly FREE_SPACE, so the robot sat in a 1.6 m2 pocket with zero
         # reachable frontiers. Local costmap keeps 0.5.
-        inflation_radius: 0.25
+        inflation_radius: 0.40
       always_send_full_costmap: true
