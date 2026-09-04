@@ -1,7 +1,7 @@
 from launch import LaunchDescription
 from launch.actions import DeclareLaunchArgument
 from launch.conditions import IfCondition
-from launch.substitutions import LaunchConfiguration, PythonExpression
+from launch.substitutions import EnvironmentVariable, LaunchConfiguration, PythonExpression
 from launch_ros.actions import Node
 
 
@@ -14,8 +14,13 @@ def generate_launch_description():
 
     return LaunchDescription([
         DeclareLaunchArgument('use_sim_time', default_value='false'),
+        # Default comes from PICAR_EXPLORER so the web UI (which launches this
+        # file with no arguments) can be pointed at either explorer without
+        # editing code. Unset -> 'frontier'.
         DeclareLaunchArgument(
-            'explorer', default_value='frontier',
+            'explorer',
+            default_value=EnvironmentVariable('PICAR_EXPLORER',
+                                              default_value='explore_lite'),
             description="'frontier' (ours, Ackermann-aware) or 'explore_lite'"),
 
         # Ours. Aims at drivable stand-off poses facing the unknown, scores
@@ -56,6 +61,26 @@ def generate_launch_description():
             }],
         ),
 
+        # explore_lite needs a grid whose free space is *exactly* cost 0 and
+        # connected; see explore_map_trinary.py for why neither Nav2's inflated
+        # global costmap nor cartographer's graded /map qualifies. A standalone
+        # nav2_costmap_2d was tried first and is the wrong tool: it is a
+        # lifecycle node that blocks on its own TF buffer, and none of its
+        # machinery is needed to answer "where is the unknown space".
+        Node(
+            package='picar2_bringup',
+            executable='explore_map_trinary.py',
+            name='explore_map_trinary',
+            output='screen',
+            condition=IfCondition(is_lite),
+            parameters=[{
+                'use_sim_time': use_sim_time,
+                'lethal_threshold': 65,
+                'in_topic': '/map',
+                'out_topic': '/explore_costmap/costmap',
+            }],
+        ),
+
         # Kept for A/B comparison: explorer:=explore_lite
         Node(
             package='explore_lite',
@@ -66,8 +91,19 @@ def generate_launch_description():
             parameters=[{
                 'use_sim_time': use_sim_time,
                 'robot_base_frame': 'base_footprint',
-                'costmap_topic': '/global_costmap/costmap',
-                'costmap_updates_topic': '/global_costmap/costmap_updates',
+                # NOT Nav2's global costmap. explore_lite's frontier search is
+                # a *descending* BFS (frontier_search.cpp:70,
+                # `map_[nbr] <= map_[idx]`), so from a FREE_SPACE cell it can
+                # only step to other cost==0 cells — it explores the connected
+                # component of zero-cost space around the robot. Nav2's
+                # inflation (0.40 / scaling 10) shatters that into islands:
+                # measured on hardware, the robot's component was 191 cells of
+                # 21453 free (0.9%) and reached 0 of 901 frontier cells, so
+                # explore_lite declared EXPLORATION_COMPLETE after 5 minutes
+                # with the room half unmapped. Nav2 is immune because Smac
+                # treats inflated cells as costly, not blocked.
+                'costmap_topic': '/explore_costmap/costmap',
+                'costmap_updates_topic': '/explore_costmap/costmap_updates',
                 'visualize': True,
                 # 0.1, not 0.25: explore_lite sends a new goal whenever the
                 # frontier centroid moves >1 cm, and Nav2 is a single-goal

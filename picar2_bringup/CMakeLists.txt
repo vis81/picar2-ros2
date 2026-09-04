@@ -13,6 +13,7 @@ install(PROGRAMS
   picar2_bringup/imu_verify.py
   picar2_bringup/joy_feedback.py
   picar2_bringup/frontier_explorer.py
+  picar2_bringup/explore_map_trinary.py
   DESTINATION lib/${PROJECT_NAME}
 )
 
