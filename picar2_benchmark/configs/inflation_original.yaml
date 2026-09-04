@@ -1,0 +1,21 @@
+# Restores the pre-b5e24ee inflation, as a control.
+#
+# b5e24ee raised the global inflation from 0.25/5.0 to 0.40/10.0 to get above
+# the 0.327 m circumscribed radius and re-enable Smac's potential-field
+# shortcut (516 planner errors per run on the Pi -> 0). The arithmetic said the
+# traversable set was effectively unchanged: cost<=50 beyond 0.257 m, versus
+# 0.25 m before.
+#
+# But dead_end_reverse fails at similar rates under two very different
+# controllers, which points at something shared rather than at either one — and
+# this is the most recent change to the shared config. In a 1.2 m pocket the new
+# inflation leaves roughly a 0.69 m usable corridor.
+#
+# If this arm succeeds reliably, a change already committed as an improvement is
+# harmful in tight spaces.
+global_costmap:
+  global_costmap:
+    ros__parameters:
+      inflation_layer:
+        cost_scaling_factor: 5.0
+        inflation_radius: 0.25

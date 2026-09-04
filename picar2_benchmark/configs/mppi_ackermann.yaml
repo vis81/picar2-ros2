@@ -1,0 +1,41 @@
+# MPPI with explicit cusp handling — the experiment the Dubins arm could not do.
+#
+# dead_end_reverse needs a reverse manoeuvre (proved: the Dubins arm finds no
+# path at all). The planner produces a correct Reeds-Shepp plan with 5 cusps and
+# RPP receives all 5, yet aborts ~75-109 times while reversing direction ~50-141
+# times. So the question is whether a different controller can execute that same
+# plan.
+#
+# enforce_path_inversion truncates the path at each cusp so the controller drives
+# one segment at a time. In Jazzy this exists for MPPI only — the equivalent RPP
+# fix (navigation2#5446) is in main and was never backported.
+#
+# controller_frequency is raised because it is server-wide and MPPI is designed
+# for 20-30 Hz; leaving it at RPP's 10 Hz would handicap the arm rather than
+# test it. That makes it part of the configuration under test, not a nuisance.
+controller_server:
+  ros__parameters:
+    controller_frequency: 20.0
+    FollowPath:
+      plugin: "nav2_mppi_controller::MPPIController"
+      time_steps: 56
+      model_dt: 0.05
+      batch_size: 2000
+      vx_std: 0.2
+      wz_std: 0.4
+      vx_max: 0.40
+      vx_min: -0.25          # reverse permitted; matches the cmd_vel_relay clamp
+      wz_max: 1.2
+      iteration_count: 1
+      prune_distance: 1.7
+      transform_tolerance: 0.3
+      motion_model: "Ackermann"
+      AckermannConstraints:
+        min_turning_r: 0.5   # measured on hardware, same value the planner uses
+      # cusp handling: drive to the inversion point, then take the next segment
+      enforce_path_inversion: true
+      inversion_xy_tolerance: 0.2
+      inversion_yaw_tolerance: 0.4
+      # MPPI samples Gaussian noise per iteration and exposes no seed; reusing
+      # the buffer is the only lever on its run-to-run variance
+      regenerate_noises: false

@@ -1,0 +1,15 @@
+name: dead_end_reverse
+description: >
+  The robot starts deep in a 1.2 m pocket facing the closed end, with the goal
+  outside. A 0.5 m minimum turning radius makes turning around in a 1.2 m pocket
+  impossible, so the only solution is a reverse manoeuvre. This targets
+  navigation2#4757 directly: RPP prunes to the nearest path point and can skip
+  the reverse segment of a Reeds-Shepp path.
+world: {size: [14, 8], rtf: 0.5, max_step: 0.001}
+obstacles:
+  - {x: -1.0, y:  0.7, sx: 2.2, sy: 0.2}
+  - {x: -1.0, y: -0.7, sx: 2.2, sy: 0.2}
+  - {x: -2.1, y:  0.0, sx: 0.2, sy: 1.6}
+start: {x: -1.0, y: 0.0, yaw: 3.14159}
+goal:  {x:  3.5, y: 0.0, yaw: 0.0}
+timeout_s: 120

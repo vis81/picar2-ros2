@@ -1,0 +1,12 @@
+# Removes reverse segments from the plan entirely.
+#
+# dead_end_reverse fails controller-side: the planner produces Reeds-Shepp paths
+# with 5 cusps, RPP receives all 5 (so this is NOT the navigation2#4757 pruning
+# bug), and then aborts 109 times while reversing direction 141 times in 120 s.
+# Dubins paths are forward-only, so if the scenario then succeeds reliably, the
+# reverse manoeuvre itself is what RPP cannot execute — established with a
+# one-line config change and no new controller.
+planner_server:
+  ros__parameters:
+    GridBased:
+      motion_model_for_search: DUBIN

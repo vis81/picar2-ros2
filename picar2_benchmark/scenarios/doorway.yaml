@@ -1,0 +1,13 @@
+name: doorway
+description: >
+  A gap in a wall. Global inflation_radius is 0.40, so a gap under ~0.9 m is
+  inflated from both sides with no zero-cost corridor left. Width is meant to be
+  swept (0.7/0.8/0.9/1.0/1.2) to locate that cliff rather than stand on it; this
+  file is the 0.9 m instance.
+world: {size: [14, 8], rtf: 0.5, max_step: 0.001}
+obstacles:
+  - {x: 0.0, y:  2.45, sx: 0.2, sy: 3.1}
+  - {x: 0.0, y: -2.45, sx: 0.2, sy: 3.1}
+start: {x: -4.0, y: 0.0, yaw: 0.0}
+goal:  {x:  4.0, y: 0.0, yaw: 0.0}
+timeout_s: 90
