@@ -86,3 +86,36 @@ def clearance(pose: tuple[float, float, float], boxes: list[Box]) -> float:
     """Smallest signed distance from the footprint at `pose` to any obstacle."""
     poly = transform(pose)
     return min((poly_box_distance(poly, b) for b in boxes), default=math.inf)
+
+
+def ray_hit(origin: tuple[float, float], angle: float, boxes: list[Box],
+            max_range: float) -> float | None:
+    """Distance to the first box surface along `angle`, or None if nothing is
+    within `max_range`. Used to predict what a lidar can actually see from a
+    pose — see spec.slam_envelope for why that matters.
+    """
+    ox, oy = origin
+    dx, dy = math.cos(angle), math.sin(angle)
+    best: float | None = None
+    for b in boxes:
+        x0, x1 = b.x - b.sx / 2, b.x + b.sx / 2
+        y0, y1 = b.y - b.sy / 2, b.y + b.sy / 2
+        # slab method
+        t_near, t_far = 0.0, max_range
+        for o, d, lo, hi in ((ox, dx, x0, x1), (oy, dy, y0, y1)):
+            if abs(d) < 1e-12:
+                if o < lo or o > hi:
+                    t_near = None
+                    break
+                continue
+            t1, t2 = (lo - o) / d, (hi - o) / d
+            if t1 > t2:
+                t1, t2 = t2, t1
+            t_near = max(t_near, t1)
+            t_far = min(t_far, t2)
+            if t_near > t_far:
+                t_near = None
+                break
+        if t_near is not None and 0.0 < t_near <= max_range:
+            best = t_near if best is None else min(best, t_near)
+    return best

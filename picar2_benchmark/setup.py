@@ -1,3 +1,5 @@
+from glob import glob
+
 from setuptools import find_packages, setup
 
 package_name = 'picar2_benchmark'
@@ -9,15 +11,12 @@ setup(
     data_files=[
         ('share/ament_index/resource_index/packages', ['resource/' + package_name]),
         ('share/' + package_name, ['package.xml']),
-        ('share/' + package_name + '/scenarios', ['scenarios/open_straight.yaml',
-                                                  'scenarios/doorway.yaml',
-                                                  'scenarios/dead_end_reverse.yaml']),
+        # globbed, not listed: a new scenario or config that silently fails to
+        # install shows up as a confusing FileNotFoundError at run time
+        ('share/' + package_name + '/scenarios', glob('scenarios/*.yaml')),
         ('share/' + package_name + '/launch',
          ['launch/benchmark_localization.launch.py']),
-        ('share/' + package_name + '/configs',
-         ['configs/rpp_dubins.yaml', 'configs/rpp_short_search.yaml',
-          'configs/mppi_ackermann.yaml',
-          'configs/inflation_original.yaml']),
+        ('share/' + package_name + '/configs', glob('configs/*.yaml')),
     ],
     install_requires=['setuptools'],
     zip_safe=True,

@@ -14,6 +14,8 @@ from __future__ import annotations
 
 import math
 
+import rclpy
+
 from action_msgs.msg import GoalStatus, GoalStatusArray
 from geometry_msgs.msg import Twist
 from nav_msgs.msg import Path
@@ -78,6 +80,8 @@ class Recorder:
         self.bt: list[tuple[float, str, str]] = []      # t, node_name, status
         self.cmd: list[tuple[float, float, float]] = []  # t, vx, wz
         self.pose: list[tuple[float, float, float, float]] = []  # t, x, y, yaw
+        self.loc_error: list[float] = []
+        self._loc_origin: tuple | None = None
         self.clearances: list[tuple[float, float]] = []
         self.plans: list[tuple[float, int, float]] = []   # t, cusps, length
         self.plan_curv: list[float] = []                 # 1/R asked for by the plan
@@ -125,10 +129,41 @@ class Recorder:
         t = self._t()
         self.pose.append((t, x, y, yaw))
         self.clearances.append((t, clearance((x, y, yaw), self.boxes)))
+        self._sample_loc_error(x, y)
+
+    def _sample_loc_error(self, gx: float, gy: float) -> None:
+        """Ground truth vs what the robot believes, in the same frame.
+
+        This is the number that separates a bad drive from a correct drive
+        to a mislocalised place - indistinguishable from the outcome alone,
+        and the reason ground truth is collected in every mode. Zero by
+        construction under ground_truth; the headline result under slam.
+
+        Both poses are taken relative to the run's own start, because
+        cartographer anchors `map` wherever the robot was when it
+        initialised: the frames share an orientation but not an origin.
+        """
+        try:
+            tf = self.node.buf.lookup_transform(
+                'map', 'base_footprint', rclpy.time.Time())
+        except Exception:                                    # noqa: BLE001
+            return
+        bx, by = tf.transform.translation.x, tf.transform.translation.y
+        if self._loc_origin is None:
+            self._loc_origin = ((gx, gy), (bx, by))
+            return
+        (g0x, g0y), (b0x, b0y) = self._loc_origin
+        self.loc_error.append(
+            math.hypot((gx - g0x) - (bx - b0x), (gy - g0y) - (by - b0y)))
 
     # ── derived metrics ─────────────────────────────────────────────────
     def metrics(self) -> dict:
         m: dict = {}
+        if self.loc_error:
+            e = sorted(self.loc_error)
+            m['loc_error_mean_m'] = round(sum(e) / len(e), 3)
+            m['loc_error_p95_m'] = round(e[min(len(e) - 1, int(0.95 * len(e)))], 3)
+            m['loc_error_max_m'] = round(e[-1], 3)
         if self.cmd:
             moving = [c for c in self.cmd if abs(c[1]) > 0.02]
             m['cmd_samples'] = len(self.cmd)

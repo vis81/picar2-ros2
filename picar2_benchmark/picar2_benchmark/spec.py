@@ -76,6 +76,47 @@ class Scenario:
         return self.walls + self.obstacles
 
 
+# The simulated LD19 and cartographer both cap at 5.0 m (picar2.urdf.xacro
+# <range><max>, cartographer.lua max_range). Rays that return nothing are
+# dropped rather than inserted as free space, so the map covers only where the
+# lidar got an actual return.
+LIDAR_MAX_RANGE = 5.0
+
+
+def slam_envelope(sc: 'Scenario', max_range: float = LIDAR_MAX_RANGE,
+                  rays: int = 360) -> tuple[float, float, float, float]:
+    """Bounding box of everything the lidar can see from the start pose.
+
+    Under SLAM the global costmap is sized from cartographer's map, and that map
+    extends only as far as the lidar gets returns — an unreturned ray contributes
+    nothing. In an open world that makes the map far smaller than the sensor
+    range suggests: measured on short_hop (14x8 world, 5 m range, walls 4 m to
+    each side), only rays within 53 deg of the side walls returned at all, so the
+    map reached just sqrt(5^2 - 4^2) = 3.0 m ahead of the robot and a goal 4 m
+    away sat outside it. Predicted finite-ray fraction 0.408 against 147/360
+    measured, which is what this model is built on.
+
+    A goal outside this box cannot be planned to in slam mode however long the
+    warm-up, so validate() rejects it instead of letting the trial report a
+    misleading navigation failure.
+    """
+    from .geometry import ray_hit
+
+    o = (sc.start.x, sc.start.y)
+    xs: list[float] = []
+    ys: list[float] = []
+    for i in range(rays):
+        a = 2.0 * math.pi * i / rays
+        d = ray_hit(o, a, sc.all_boxes, max_range)
+        if d is None:
+            continue
+        xs.append(o[0] + d * math.cos(a))
+        ys.append(o[1] + d * math.sin(a))
+    if not xs:
+        return (o[0], o[1], o[0], o[1])
+    return (min(xs), min(ys), max(xs), max(ys))
+
+
 def _pose(d: dict) -> Pose:
     return Pose(float(d['x']), float(d['y']), float(d.get('yaw', 0.0)))
 
@@ -115,3 +156,16 @@ def validate(sc: Scenario) -> None:
                 f'{sc.name}: {label} overlaps an obstacle (clearance {c:.3f} m)')
     if math.dist((sc.start.x, sc.start.y), (sc.goal.x, sc.goal.y)) < 0.5:
         raise ValueError(f'{sc.name}: goal is within 0.5 m of start; nothing to measure')
+
+    # Every scenario must be runnable in all three localisation modes, so that
+    # ground_truth / slam / amcl are comparable on identical geometry. slam is
+    # the binding constraint: see slam_envelope.
+    x0, y0, x1, y1 = slam_envelope(sc)
+    m = 0.30                       # keep the goal off the very edge of the map
+    if not (x0 + m <= sc.goal.x <= x1 - m and y0 + m <= sc.goal.y <= y1 - m):
+        raise ValueError(
+            f'{sc.name}: goal ({sc.goal.x}, {sc.goal.y}) lies outside what the '
+            f'lidar can observe from the start pose — x [{x0:.2f}, {x1:.2f}], '
+            f'y [{y0:.2f}, {y1:.2f}]. Under slam the costmap never covers it, so '
+            f'the scenario cannot run in every mode. Move a wall within '
+            f'{LIDAR_MAX_RANGE} m behind the goal, or bring the goal closer.')

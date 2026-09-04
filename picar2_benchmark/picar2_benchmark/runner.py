@@ -23,6 +23,7 @@ from action_msgs.msg import GoalStatus
 from geometry_msgs.msg import PoseStamped
 from nav2_msgs.action import NavigateToPose
 from rclpy.action import ActionClient
+from rclpy.duration import Duration
 
 from . import attribution, gates, map_gen, spec, world_gen
 from .recorder import Recorder
@@ -162,15 +163,56 @@ class GoalRunner:
     a result belongs to the goal we sent.
     """
 
-    def __init__(self, ctx: gates.GateContext, timeout_s: float, rec: Recorder):
+    def __init__(self, ctx: gates.GateContext, timeout_s: float, rec: Recorder,
+                 map_warmup_s: float = 0.0):
         self.ctx = ctx
         self.timeout_s = timeout_s
         self.rec = rec
+        self.map_warmup_s = map_warmup_s
         self.client = ActionClient(ctx, NavigateToPose, 'navigate_to_pose')
         self.handle = None
         self.status = None
         self.path_m = 0.0
         self._last = None
+
+    def goal_in_map(self, goal, start) -> tuple[float, float, float]:
+        """Express a scenario goal in whatever frame the robot is actually using.
+
+        Scenario coordinates are world coordinates. Under ground_truth the map
+        frame IS the world, so they pass through unchanged. Under SLAM,
+        cartographer anchors `map` at the robot's start pose, so a world goal
+        means something different — sending it unchanged had the planner
+        reporting a start of (0.34, -0.01) for a robot spawned at (-1.0, 0).
+
+        Converting through the body frame is correct in both cases: "so many
+        metres ahead of, and left of, where I started".
+        """
+        dx, dy = goal.x - start.x, goal.y - start.y
+        c, sn = math.cos(-start.yaw), math.sin(-start.yaw)
+        bx, by = dx * c - dy * sn, dx * sn + dy * c        # goal in body frame
+        byaw = goal.yaw - start.yaw
+        try:
+            tf = self.ctx.buf.lookup_transform(
+                'map', 'base_footprint', rclpy.time.Time(),
+                timeout=Duration(seconds=3.0))
+        except Exception:                                   # noqa: BLE001
+            return (goal.x, goal.y, goal.yaw)               # best effort
+        t, q = tf.transform.translation, tf.transform.rotation
+        myaw = math.atan2(2 * (q.w * q.z + q.x * q.y), 1 - 2 * (q.y * q.y + q.z * q.z))
+        c2, s2 = math.cos(myaw), math.sin(myaw)
+        return (t.x + bx * c2 - by * s2, t.y + bx * s2 + by * c2, myaw + byaw)
+
+    def goal_is_mappable(self, gx: float, gy: float) -> bool:
+        """Is the goal inside the current costmap? Under SLAM it often is not —
+        the area simply has not been seen yet — and Smac then rejects the goal
+        in 30 ms with 'Goal Coordinates outside of the map', which is not a
+        navigation result and should not be recorded as one."""
+        m = self.ctx.costmap
+        if m is None:
+            return False
+        ox, oy = m.info.origin.position.x, m.info.origin.position.y
+        return (ox <= gx <= ox + m.info.width * m.info.resolution
+                and oy <= gy <= oy + m.info.height * m.info.resolution)
 
     def _pose(self, p) -> PoseStamped:
         m = PoseStamped()
@@ -188,11 +230,39 @@ class GoalRunner:
         self._last = (x, y)
         self.rec.sample_pose(x, y, yaw)
 
-    def run(self, goal) -> dict:
+    def run(self, goal, start=None) -> dict:
         if not self.client.wait_for_server(timeout_sec=30.0):
             return {'outcome': 'SIM_DEGRADED', 'detail': 'navigate_to_pose absent'}
+        # `sent` is the goal in the robot's own frame; `goal` stays in world
+        # coordinates. Keeping them apart matters: rebinding `goal` here made
+        # every downstream metric compare a world ground-truth pose against a
+        # map-frame goal. Under ground_truth the frames coincide so it was
+        # invisible, but under SLAM it reported final_xy_error_m 2.63 m for a
+        # run that actually finished 0.26 m from the goal.
+        sent = goal
+        if start is not None:
+            gx, gy, gyaw = self.goal_in_map(goal, start)
+            sent = type(goal)(gx, gy, gyaw)
+        # SLAM warm-up: give cartographer time to observe the goal region before
+        # sending the goal. The map genuinely grows — 132 -> 139 cells was
+        # observed while a 4.3 m goal sat just outside it — so checking once and
+        # giving up mis-reports a timing problem as an unmappable scenario.
+        # Cartographer's start-up is also not navigation time and should not be
+        # charged to the trial.
+        warm_end = time.time() + self.map_warmup_s
+        while not self.goal_is_mappable(sent.x, sent.y) and time.time() < warm_end:
+            rclpy.spin_once(self.ctx, timeout_sec=0.2)
+        if not self.goal_is_mappable(sent.x, sent.y):
+            m = self.ctx.costmap
+            extent = (f'{m.info.width * m.info.resolution:.1f}x'
+                      f'{m.info.height * m.info.resolution:.1f} m' if m else 'none')
+            return {'outcome': 'SCENARIO_UNMAPPABLE',
+                    'detail': f'goal ({sent.x:.2f},{sent.y:.2f}) still outside the '
+                              f'costmap ({extent}) after {self.map_warmup_s:.0f}s of '
+                              f'mapping; that area cannot be observed from the start '
+                              f'pose, so no goal there is plannable under SLAM'}
         g = NavigateToPose.Goal()
-        g.pose = self._pose(goal)
+        g.pose = self._pose(sent)
         send = self.client.send_goal_async(g)
         end = time.time() + 15
         while time.time() < end and not send.done():
@@ -301,7 +371,9 @@ def run_trial(scenario: str, mode: str, out_dir: Path, gen_dir: Path,
 
         rec = Recorder(ctx, sc.all_boxes)
         ctx.spin(1.0)                       # let the subscriptions connect
-        run = GoalRunner(ctx, sc.timeout_s, rec).run(sc.goal)
+        # only SLAM has to wait for the world to be observed
+        warmup = 60.0 if mode == 'slam' else 0.0
+        run = GoalRunner(ctx, sc.timeout_s, rec, warmup).run(sc.goal, sc.start)
         result.update(run)
         m = rec.metrics()
         result['metrics'] = m

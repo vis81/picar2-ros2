@@ -152,16 +152,44 @@ def gate_costmap(ctx: GateContext, sc, mode: str, timeout=90.0, min_free=400) ->
         ox, oy = m.info.origin.position.x, m.info.origin.position.y
         w = m.info.width * m.info.resolution
         h = m.info.height * m.info.resolution
-        covered = all(ox <= p.x <= ox + w and oy <= p.y <= oy + h
-                      for p in (sc.start, sc.goal))
-        if covered:
+        def inside_xy(x, y):
+            return ox <= x <= ox + w and oy <= y <= oy + h
+
+        def inside(p):
+            return inside_xy(p.x, p.y)
+
+        # The robot's pose in the *map* frame, not the scenario's world pose:
+        # under SLAM cartographer anchors map at the start pose, so a world
+        # coordinate names a different place. Using the live transform is
+        # correct in every mode, since with a static map the two coincide.
+        try:
+            tf = ctx.buf.lookup_transform('map', 'base_footprint',
+                                          rclpy.time.Time(),
+                                          timeout=Duration(seconds=2.0))
+            here = (tf.transform.translation.x, tf.transform.translation.y)
+        except Exception:                                    # noqa: BLE001
+            continue
+
+        if mode == 'slam':
+            # Only the start need be mapped. Under SLAM the goal is usually in
+            # territory the lidar has never seen — here it is 4.5 m away behind
+            # a wall — and it cannot be mapped until the robot drives there,
+            # which requires sending the goal. Requiring goal coverage first is
+            # circular. Planning into unknown space is what allow_unknown: true
+            # is for, and it is what the robot does on every real mission.
+            if inside_xy(*here):
+                return
+        elif inside_xy(*here) and inside(sc.goal):
             return
-        if mode != 'slam':
+        else:
+            # static map modes: the map is known up front, so a costmap that
+            # does not span the scenario means the static layer never applied
             raise GateFailure(
                 f'costmap {w:.1f}x{h:.1f} at ({ox:.1f},{oy:.1f}) does not cover '
                 f'start/goal — static map not applied?')
-        # under SLAM the map grows, so keep waiting for it to reach the goal
-    raise GateFailure('global costmap never covered start and goal')
+    raise GateFailure(
+        'global costmap never covered the start pose'
+        if mode == 'slam' else 'global costmap never covered start and goal')
 
 
 def gate_single_map_odom(ctx: GateContext, mode: str) -> None:

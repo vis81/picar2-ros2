@@ -4,10 +4,13 @@ description: >
   inflated from both sides with no zero-cost corridor left. Width is meant to be
   swept (0.7/0.8/0.9/1.0/1.2) to locate that cliff rather than stand on it; this
   file is the 0.9 m instance.
-world: {size: [14, 8], rtf: 0.5, max_step: 0.001}
+
+  Sized so the far wall is visible through the gap from the start pose, which is
+  what lets the scenario run under slam as well as ground_truth and amcl.
+world: {size: [5.5, 4.5], rtf: 0.5, max_step: 0.001}
 obstacles:
-  - {x: 0.0, y:  2.45, sx: 0.2, sy: 3.1}
-  - {x: 0.0, y: -2.45, sx: 0.2, sy: 3.1}
-start: {x: -4.0, y: 0.0, yaw: 0.0}
-goal:  {x:  4.0, y: 0.0, yaw: 0.0}
+  - {x: 0.0, y:  1.35, sx: 0.2, sy: 1.8}
+  - {x: 0.0, y: -1.35, sx: 0.2, sy: 1.8}
+start: {x: -2.0, y: 0.0, yaw: 0.0}
+goal:  {x:  2.0, y: 0.0, yaw: 0.0}
 timeout_s: 90
