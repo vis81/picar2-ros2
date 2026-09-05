@@ -166,6 +166,28 @@ class Recorder:
                           1 - 2 * (q.y * q.y + q.z * q.z))
         self.loc_pairs.append((gx, gy, gyaw, t.x, t.y, byaw))
 
+
+    def dump_trajectory(self, path) -> None:
+        """Write the raw pose and command series next to the result.
+
+        Aggregates alone cannot answer "what did it actually do" - the corner
+        scenarios produce a bimodal reversal count, and telling a clean arc from
+        a recovery thrash needs the path itself, not a median.
+        """
+        import json as _json
+        _json.dump({
+            'pose': [[round(v, 4) for v in p] for p in self.pose],   # t,x,y,yaw
+            'cmd': [[round(v, 4) for v in c] for c in self.cmd],     # t,vx,wz
+            'clearance': [[round(v, 4) for v in c] for c in self.clearances],
+            'plans': [[round(v, 4) for v in p] for p in self.plans],  # t,cusps,len
+            'bt': [[round(e[0], 4), e[1], e[2]] for e in self.bt],    # t,node,status
+        }, open(path, 'w'))
+
+    def failure_onset(self):
+        """Pose just before control broke down; see spec.pose_before."""
+        from .spec import pose_before
+        return pose_before(self.bt, self.pose)
+
     # ── derived metrics ─────────────────────────────────────────────────
     def metrics(self) -> dict:
         m: dict = {}

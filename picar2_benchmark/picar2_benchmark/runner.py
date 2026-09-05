@@ -178,6 +178,21 @@ def _wait_topic(topic: str, timeout: float) -> bool:
     return False
 
 
+# Topics recorded for every trial so a run can be re-examined after the fact.
+# Deliberately not the costmaps: /global_costmap/costmap alone is ~100 kB a
+# message and the update streams dwarf everything else, which would turn a
+# 48-trial sweep into gigabytes. The scenario geometry is in the spec and the
+# occupancy is reproducible from it, so what is worth keeping is what the stack
+# decided: plans, commands, the BT's own account, and ground truth to check it
+# against. The three action topics are hidden and need the explicit flag.
+BAG_TOPICS = [
+    '/behavior_tree_log', '/plan', '/received_global_plan', '/local_plan',
+    '/cmd_vel', '/gt/odom', '/odom', '/lidar_node/scan', '/joint_states',
+    '/tf', '/tf_static', '/rosout',
+    '/navigate_to_pose/_action/status', '/follow_path/_action/status',
+    '/compute_path_to_pose/_action/status',
+]
+
 # Wall seconds with a frozen /clock before a trial is called degraded.
 SIM_CLOCK_TIMEOUT = 15.0
 
@@ -375,9 +390,21 @@ class GoalRunner:
         }
 
 
+def _hlog(logs, msg: str) -> None:
+    """The harness's own account of a trial: what it decided and when.
+
+    The result JSON says what a trial concluded; this says how it got there,
+    which is what you need when a trial behaves differently from its peers.
+    """
+    logs.mkdir(parents=True, exist_ok=True)
+    with (logs / 'harness.log').open('a') as f:
+        f.write(f'{time.strftime("%H:%M:%S")} {msg}\n')
+
+
 def run_trial(scenario: str, mode: str, out_dir: Path, gen_dir: Path,
               keep_up: bool = False, sensor_noise: float = 1.0,
-              overlay: str = '', bt: str = '') -> dict:
+              overlay: str = '', bt: str = '',
+              trajectory: bool = True, bag: bool = True) -> dict:
     sc = spec.load(scenario)
     gen = gen_dir / sc.name
     gen.mkdir(parents=True, exist_ok=True)
@@ -398,6 +425,12 @@ def run_trial(scenario: str, mode: str, out_dir: Path, gen_dir: Path,
                 'detail': f'ROS_DOMAIN_ID={os.environ.get("ROS_DOMAIN_ID", "0")} '
                           f'already has nodes ({busy}); refusing to start so two '
                           f'stacks do not fight over goals'}
+    # Give the trial its own ROS log tree. The node-level logs are richer than
+    # the captured stdout and are otherwise scattered under ~/.ros/log by
+    # launch timestamp, which is painful to match back to a trial.
+    os.environ['ROS_LOG_DIR'] = str(logs / 'ros')
+    _hlog(logs, f'trial start scenario={sc.name} mode={mode} noise={sensor_noise}'
+                f' overlay={overlay or "-"} bt={bt or "-"}')
     stack = Stack()
     try:
         stack.launch([
@@ -418,6 +451,13 @@ def run_trial(scenario: str, mode: str, out_dir: Path, gen_dir: Path,
             + ([f'nav_to_pose_bt:={bt}'] if bt else []),
             logs / 'nav2.log')
 
+        if bag:
+            # SIGINT-terminated by Stack.teardown, which is what closes the
+            # bag cleanly; a SIGKILL would leave it unindexed.
+            stack.launch(['ros2', 'bag', 'record', '-o', str(logs / 'bag'),
+                          '--include-hidden-topics', '--max-cache-size', '10485760',
+                          *BAG_TOPICS], logs / 'bag.log')
+
         rclpy.init()
         ctx = gates.GateContext()
         gates.wait_for_ground_truth(ctx)
@@ -431,6 +471,7 @@ def run_trial(scenario: str, mode: str, out_dir: Path, gen_dir: Path,
         gates.gate_spawn_pose(ctx, sc.start)
         gates.gate_single_map_odom(ctx, mode)
         gates.gate_costmap(ctx, sc, mode)
+        _hlog(logs, 'gates passed')
         result['gates'] = 'passed'
         try:
             result['effective'] = effective_params()
@@ -441,10 +482,24 @@ def run_trial(scenario: str, mode: str, out_dir: Path, gen_dir: Path,
         ctx.spin(1.0)                       # let the subscriptions connect
         # only SLAM has to wait for the world to be observed
         warmup = 60.0 if mode == 'slam' else 0.0
+        _hlog(logs, f'goal sent x={sc.goal.x} y={sc.goal.y} yaw={sc.goal.yaw}')
         run = GoalRunner(ctx, sc.timeout_s, rec, warmup).run(sc.goal, sc.start)
         result.update(run)
+        _hlog(logs, f"outcome={run.get('outcome')} time_s={run.get('time_s')}")
         m = rec.metrics()
         result['metrics'] = m
+        if trajectory:
+            traj = logs / 'trajectory.json'
+            rec.dump_trajectory(traj)
+            result['trajectory'] = str(traj)
+        if bag:
+            result['bag'] = str(logs / 'bag')
+        onset = rec.failure_onset()
+        if onset:
+            repro = spec.write_repro(sc, onset, logs)
+            result['repro_scenario'] = str(repro)
+            _hlog(logs, f'control broke down at ({onset[0]:.2f},{onset[1]:.2f},'
+                        f'{onset[2]:.2f}); wrote {repro.name}')
         cls, why = attribution.classify(
             run.get('outcome', 'UNKNOWN'), m,
             run.get('final_xy_error_m', 99.0), run.get('final_yaw_error_deg', 0.0))
@@ -454,8 +509,10 @@ def run_trial(scenario: str, mode: str, out_dir: Path, gen_dir: Path,
         if ev:
             result['cusp_evidence'] = ev
     except gates.GateFailure as e:
+        _hlog(logs, f'GATE FAILED: {e}')
         result.update({'outcome': 'SIM_DEGRADED', 'detail': str(e)})
     except Exception as e:                                   # noqa: BLE001
+        _hlog(logs, f'RUNNER ERROR: {e!r}')
         result.update({'outcome': 'RUNNER_ERROR', 'detail': repr(e)})
     finally:
         try:
@@ -481,11 +538,15 @@ def main(argv=None) -> int:
                     help='navigate_to_pose behaviour tree XML (replan cadence)')
     ap.add_argument('--keep-up', action='store_true',
                     help='leave the stack running for inspection')
+    ap.add_argument('--no-trajectory', dest='trajectory', action='store_false',
+                    help='skip the raw pose/command dump (on by default)')
+    ap.add_argument('--no-bag', dest='bag', action='store_false',
+                    help='skip the rosbag (on by default)')
     a = ap.parse_args(argv)
     out = Path(a.out)
     out.mkdir(parents=True, exist_ok=True)
     res = run_trial(a.scenario, a.mode, out, Path('/tmp/picar2_bench'), a.keep_up,
-                    a.sensor_noise, a.overlay, a.bt)
+                    a.sensor_noise, a.overlay, a.bt, a.trajectory, a.bag)
     name = (f"{res['scenario']}_{a.mode}_{res['config']}_"
             f"n{a.sensor_noise}_{int(time.time())}.json")
     (out / name).write_text(json.dumps(res, indent=2))

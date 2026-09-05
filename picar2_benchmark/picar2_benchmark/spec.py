@@ -117,6 +117,55 @@ def slam_envelope(sc: 'Scenario', max_range: float = LIDAR_MAX_RANGE,
     return (min(xs), min(ys), max(xs), max(ys))
 
 
+def pose_before(bt_events, pose_series, node: str = 'FollowPath',
+                lead_s: float = 1.0):
+    """The pose `lead_s` before `node` first reported FAILURE, or None.
+
+    Kept here rather than on the Recorder so it can be tested without ROS: the
+    path it feeds only runs when a trial fails, which is rare enough that it
+    would otherwise ship unverified.
+    """
+    fails = [t for t, name, status in bt_events
+             if name == node and status == 'FAILURE']
+    if not fails or not pose_series:
+        return None
+    target = fails[0] - lead_s
+    best = min(pose_series, key=lambda p: abs(p[0] - target))
+    return best[1], best[2], best[3]
+
+
+def write_repro(sc: 'Scenario', pose, out_dir) -> Path:
+    """Write a scenario that starts where control broke down.
+
+    A rosbag cannot reproduce a closed-loop failure: replaying it feeds the
+    stack its old inputs while the robot no longer responds to the commands it
+    emits, so the state diverges within a control cycle. Respawning at the pose
+    where control broke down does reproduce it, and turns "run it until it
+    fails again" into a single deterministic run - worth having when the
+    corner_right thrash fires in only about 3 runs of 19.
+    """
+    x, y, yaw = pose
+    lines = [f'name: {sc.name}_repro',
+             'description: >',
+             f'  Auto-generated from a failed {sc.name} run. Starts at the pose where',
+             '  FollowPath first failed, so the breakdown is reproduced directly',
+             '  rather than waiting for it to recur on its own.',
+             f'world: {{size: [{sc.size[0]}, {sc.size[1]}], rtf: {sc.rtf}, '
+             f'max_step: {sc.max_step}}}']
+    if sc.obstacles:
+        lines.append('obstacles:')
+        lines += [f'  - {{x: {b.x}, y: {b.y}, sx: {b.sx}, sy: {b.sy}}}'
+                  for b in sc.obstacles]
+    else:
+        lines.append('obstacles: []')
+    lines += [f'start: {{x: {x:.3f}, y: {y:.3f}, yaw: {yaw:.4f}}}',
+              f'goal:  {{x: {sc.goal.x}, y: {sc.goal.y}, yaw: {sc.goal.yaw}}}',
+              f'timeout_s: {sc.timeout_s}']
+    out = Path(out_dir) / 'repro.yaml'
+    out.write_text('\n'.join(lines) + '\n')
+    return out
+
+
 def _pose(d: dict) -> Pose:
     return Pose(float(d['x']), float(d['y']), float(d.get('yaw', 0.0)))
 
