@@ -29,6 +29,7 @@ setup(
             'bench-generate = picar2_benchmark.cli:generate_main',
             'gt_localizer = picar2_benchmark.gt_localizer:main',
             'bench-run = picar2_benchmark.runner:main',
+            'bench-explore = picar2_benchmark.explore_runner:main',
             'bench-report = picar2_benchmark.report:main',
         ],
     },

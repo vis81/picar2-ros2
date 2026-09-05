@@ -1,0 +1,23 @@
+name: explore_room
+description: >
+  The simplest exploration test there is: one empty rectangular room, entered
+  from a corner. No doorways, no dead ends, no interior structure - so a poor
+  result here is the explorer's decision-making and nothing else.
+
+  Sized deliberately. At 8 x 6 m, 64% of the floor is already inside the 5 m
+  lidar's reach from the start pose, and a first attempt reported 90% coverage
+  after driving 3.35 m - the room was being scanned, not explored. At 12 x 9 m
+  only 29% is visible from the start, so the other 71% has to be driven to.
+
+  Coverage is measured against the true free area rasterised from this
+  geometry: a number the robot cannot work out about itself, since it only
+  knows what it has already mapped and so cannot tell a finished room from one
+  it gave up on.
+world: {size: [12.0, 9.0], rtf: 0.5, max_step: 0.001}
+obstacles: []
+start: {x: -5.0, y: -3.5, yaw: 0.0}
+goal:  {x: 0.0, y: 0.0, yaw: 0.0}     # unused when exploring; kept for the loader
+explore:
+  duration_s: 420        # simulated seconds
+  target_coverage: 0.90  # stop early once this much of the room is mapped
+  plateau_s: 60          # or when the map stops growing for this long

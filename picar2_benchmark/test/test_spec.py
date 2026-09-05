@@ -1,3 +1,4 @@
+from pathlib import Path
 import pytest
 
 from picar2_benchmark import spec
@@ -71,3 +72,31 @@ def test_pose_before_picks_the_pose_ahead_of_the_failure():
     assert abs(x - 8.0) < 0.6                     # ~1 s of run-up before t=9
     assert spec.pose_before([], poses) is None    # no failure -> nothing to repro
     assert spec.pose_before(bt, []) is None
+
+
+def test_explore_scenario_validates_without_a_reachable_goal():
+    """Exploration has no goal pose, so the slam-envelope and goal-distance
+    checks that every navigation scenario must pass do not apply to it."""
+    sc = spec.load(Path(__file__).resolve().parent.parent
+                   / 'scenarios' / 'explore_room.yaml')
+    spec.validate(sc)
+    assert sc.explore is not None
+    assert sc.explore['duration_s'] > 0
+
+
+def test_explore_block_is_validated():
+    base = dict(name='x', size=(6.0, 5.0),
+                start=spec.Pose(-2.0, 0.0, 0.0), goal=spec.Pose(2.0, 0.0, 0.0))
+    with pytest.raises(ValueError, match='duration_s'):
+        spec.validate(spec.Scenario(**base, explore={'duration_s': 0}))
+    with pytest.raises(ValueError, match='target_coverage'):
+        spec.validate(spec.Scenario(**base,
+                                    explore={'duration_s': 60, 'target_coverage': 1.5}))
+
+
+def test_free_area_matches_the_geometry():
+    """An empty room's free area is its interior, so this is checkable by hand
+    and pins the rasteriser the coverage metric depends on."""
+    sc = spec.Scenario(name='r', size=(8.0, 6.0),
+                       start=spec.Pose(-3.0, -2.0, 0.0), goal=spec.Pose(0.0, 0.0, 0.0))
+    assert abs(spec.free_area_m2(sc) - 48.0) < 1.0     # 8 x 6 less wall rounding

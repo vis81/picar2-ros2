@@ -57,6 +57,10 @@ class Scenario:
     max_step: float = 0.001
     wall_thickness: float = 0.2
     description: str = ''
+    # Present on exploration scenarios, absent on navigation ones. Exploration
+    # has no goal pose: the task is to map the space, so the run ends on
+    # coverage or on the map ceasing to grow, not on arrival.
+    explore: dict | None = None
 
     @property
     def walls(self) -> list[Box]:
@@ -166,6 +170,19 @@ def write_repro(sc: 'Scenario', pose, out_dir) -> Path:
     return out
 
 
+def free_area_m2(sc: 'Scenario', resolution: float = 0.05) -> float:
+    """True free area of the world, in square metres.
+
+    The explorer only knows what it has mapped; this is what there was to map.
+    Coverage measured against it is a number the robot cannot compute about
+    itself, which is the point - the same reason ground truth is collected in
+    every localisation mode.
+    """
+    from .map_gen import rasterise, FREE
+    img, _ = rasterise(sc, resolution)
+    return float((img == FREE).sum()) * resolution * resolution
+
+
 def _pose(d: dict) -> Pose:
     return Pose(float(d['x']), float(d['y']), float(d.get('yaw', 0.0)))
 
@@ -182,6 +199,7 @@ def load(path: str | Path) -> Scenario:
         obstacles=[Box(float(o['x']), float(o['y']), float(o['sx']), float(o['sy']))
                    for o in raw.get('obstacles', [])],
         timeout_s=float(raw.get('timeout_s', 90.0)),
+        explore=raw.get('explore'),
         rtf=float(world.get('rtf', 0.5)),
         max_step=float(world.get('max_step', 0.001)),
         description=raw.get('description', ''),
@@ -196,13 +214,22 @@ def validate(sc: Scenario) -> None:
     from .geometry import clearance
 
     w, h = sc.size
-    for label, p in (('start', sc.start), ('goal', sc.goal)):
+    checked = (('start', sc.start),) if sc.explore else (('start', sc.start),
+                                                         ('goal', sc.goal))
+    for label, p in checked:
         if abs(p.x) > w / 2 or abs(p.y) > h / 2:
             raise ValueError(f'{sc.name}: {label} ({p.x}, {p.y}) is outside the world')
         c = clearance((p.x, p.y, p.yaw), sc.all_boxes)
         if c <= 0.0:
             raise ValueError(
                 f'{sc.name}: {label} overlaps an obstacle (clearance {c:.3f} m)')
+    if sc.explore:
+        e = sc.explore
+        if float(e.get('duration_s', 0)) <= 0:
+            raise ValueError(f'{sc.name}: explore.duration_s must be positive')
+        if not 0 < float(e.get('target_coverage', 0.95)) <= 1.0:
+            raise ValueError(f'{sc.name}: explore.target_coverage must be in (0, 1]')
+        return
     if math.dist((sc.start.x, sc.start.y), (sc.goal.x, sc.goal.y)) < 0.5:
         raise ValueError(f'{sc.name}: goal is within 0.5 m of start; nothing to measure')
 
