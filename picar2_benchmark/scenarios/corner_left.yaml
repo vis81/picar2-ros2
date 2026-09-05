@@ -1,0 +1,25 @@
+name: corner_left
+description: >
+  A 90 degree left turn through an L-shaped corridor 1.8 m wide. The robot
+  starts in the incoming leg facing +x and must finish in the outgoing leg
+  facing +y, so the turn has to be completed, not merely entered.
+
+  Paired with corner_right, which is its exact mirror: same corridor width, same
+  clearances (0.71 m at the start, 0.70 m at the goal) and mirrored lidar
+  envelopes. Any difference between the two is the robot or the planner, not the
+  geometry - which is the point. The steering LUT in picar2.urdf.xacro was
+  measured from a wheel-angle photo and is not guaranteed symmetric, and Smac's
+  Reeds-Shepp search has no guarantee of left/right parity either.
+
+  The goal sits 0.4 m past the inner corner. It cannot sit further: a corner
+  occludes what lies beyond it, so under slam the costmap only covers what the
+  lidar sees through the opening from the start pose. See spec.slam_envelope.
+world: {size: [8.0, 8.0], rtf: 0.5, max_step: 0.001}
+obstacles:
+  - {x:  0.00, y: -0.90, sx: 6.8, sy: 0.2}   # outer wall, incoming leg
+  - {x: -2.15, y:  0.90, sx: 2.7, sy: 0.2}   # inner corner wall
+  - {x:  2.15, y:  1.50, sx: 0.2, sy: 4.8}   # outer wall, outgoing leg
+  - {x:  0.35, y:  2.40, sx: 0.2, sy: 3.0}   # inner wall, outgoing leg
+start: {x: -1.55, y: 0.00, yaw: 0.0}
+goal:  {x:  1.25, y: 1.30, yaw: 1.5708}
+timeout_s: 90
