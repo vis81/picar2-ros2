@@ -1,0 +1,14 @@
+# Halve the heading quantisation: 36 bins -> 72 (10 deg -> 5 deg).
+#
+# Diagnostic for the left/right asymmetry. Motion primitives are generated as
+# exact mirrors and the goal binning handles negative headings correctly, so if
+# a finer heading lattice removes the asymmetry the cause is quantisation - the
+# reachable set being too coarse for the right-hand search to land on the node
+# the left-hand one reaches. If it does not, quantisation is exonerated.
+#
+# Note CLAUDE.md: 72 bins cost ~42 s of startup on the Pi 4, so this is a
+# diagnostic and a PC-side option, not a robot default.
+planner_server:
+  ros__parameters:
+    GridBased:
+      angle_quantization_bins: 72

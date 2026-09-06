@@ -1,0 +1,13 @@
+# Disable the Reeds-Shepp analytic expansion (max_length below the sqrt(2)
+# cell minimum makes getAnalyticPath return empty every time).
+#
+# Diagnostic, not a fix. Left turns come back at exactly the ideal arc length
+# while right turns get lattice paths 1.2-2x longer with 2 cusps, which is what
+# a successful analytic expansion versus a raw lattice search looks like. If
+# disabling it makes LEFT degrade to match right, the expansion is where the
+# asymmetry lives and the search itself is even-handed. If left stays clean,
+# the asymmetry is in the lattice search instead.
+planner_server:
+  ros__parameters:
+    GridBased:
+      analytic_expansion_max_length: 0.01
