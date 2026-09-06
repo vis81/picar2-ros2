@@ -1,0 +1,10 @@
+# Give the search every reachable angle bin instead of only the extreme turns.
+#
+# With minimum_turning_radius 0.5 and 36 bins, each primitive swings several bins
+# at once, so the reachable set is coarse. allow_primitive_interpolation fills in
+# the intermediate turns, which may let the right-hand search reach a node the
+# left-hand one reaches for free.
+planner_server:
+  ros__parameters:
+    GridBased:
+      allow_primitive_interpolation: true

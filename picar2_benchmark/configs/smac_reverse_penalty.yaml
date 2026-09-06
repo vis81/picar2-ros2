@@ -1,0 +1,11 @@
+# Make a reversal expensive enough that the search works to avoid one.
+#
+# Smac returns a cusp-free path turning left and a 2-cusp path turning right for
+# exactly mirrored queries on a symmetric costmap. Raising analytic_expansion_ratio
+# did not help, so the search is not failing to *try* the expansion - it is not
+# reaching a node from which it succeeds. If the 2-cusp path simply costs more
+# than continuing to search, the right-hand query should find the clean one too.
+planner_server:
+  ros__parameters:
+    GridBased:
+      reverse_penalty: 10.0     # was 2.0

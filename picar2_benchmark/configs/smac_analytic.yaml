@@ -1,0 +1,13 @@
+# Attempt the Reeds-Shepp analytic expansion far more often.
+#
+# With a symmetric costmap and exactly mirrored queries, Smac returns a
+# cusp-free path turning left and a 2-cusp path turning right. The motion
+# primitives are exact mirrors, but LEFT is inserted before RIGHT, so equal-cost
+# ties break left - and in marginal cases that decides whether the search
+# reaches a node from which the analytic expansion succeeds. Trying it more
+# often should let the right-hand search find the same solution.
+planner_server:
+  ros__parameters:
+    GridBased:
+      analytic_expansion_ratio: 1.0     # was 3.5; lower = attempted more often
+      analytic_expansion_max_length: 4.0 # was 3.0

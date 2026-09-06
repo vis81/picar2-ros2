@@ -1,0 +1,16 @@
+name: turn_open_right
+description: >
+  The same 90 degree right turn as corner_right, in open space with the corridor
+  removed. Start pose, goal pose and turn direction are identical; only the
+  walls are gone.
+
+  This separates two explanations for the left/right asymmetry: if turning
+  -90 degrees still costs reversals here, it belongs to the planner or the
+  controller, because there is nothing to collide with and no costmap gradient
+  to squeeze the path. If the reversals disappear, the asymmetry is in how the
+  corridor is perceived or inflated, not in the turn itself.
+world: {size: [6.5, 6.5], rtf: 0.5, max_step: 0.001}
+obstacles: []
+start: {x: -1.55, y: 0.00, yaw: 0.0}
+goal:  {x:  1.25, y: -1.30, yaw: -1.5708}
+timeout_s: 90
