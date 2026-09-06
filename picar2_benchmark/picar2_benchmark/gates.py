@@ -107,7 +107,7 @@ def gate_settle(ctx: GateContext, timeout=20.0, still=1.0, eps=0.01) -> None:
     raise GateFailure('robot never settled')
 
 
-def gate_motion(ctx: GateContext, speed=0.25, seconds=4.0, min_move=0.05) -> None:
+def gate_motion(ctx: GateContext, speed=0.25, timeout=6.0, min_move=0.05) -> None:
     """Command motion and require ground truth to move.
 
     `ros2 control list_controllers` is not sufficient: it has answered from a
@@ -118,15 +118,23 @@ def gate_motion(ctx: GateContext, speed=0.25, seconds=4.0, min_move=0.05) -> Non
     x0, y0, _ = ctx.gt_pose()
     t = Twist()
     t.linear.x = speed
-    end = time.time() + seconds
+    # Stop as soon as the robot has demonstrably moved rather than driving a
+    # fixed interval: the gate only has to prove the controllers respond, and
+    # min_move at this speed takes about 0.2 s. Driving four seconds - a whole
+    # metre - and teleporting back cost several seconds per trial for no extra
+    # assurance, and every trial pays it.
+    end = time.time() + timeout
     while time.time() < end:
         ctx.cmd.publish(t)
         rclpy.spin_once(ctx, timeout_sec=0.02)
+        x, y, _ = ctx.gt_pose()
+        if math.dist((x0, y0), (x, y)) >= min_move:
+            break
     t.linear.x = 0.0
-    for _ in range(20):
+    for _ in range(15):
         ctx.cmd.publish(t)
         rclpy.spin_once(ctx, timeout_sec=0.02)
-    ctx.spin(1.0)
+    ctx.spin(0.3)
     x1, y1, _ = ctx.gt_pose()
     moved = math.dist((x0, y0), (x1, y1))
     if moved < min_move:
@@ -197,9 +205,11 @@ def gate_costmap(ctx: GateContext, sc, mode: str, timeout=90.0, min_free=400) ->
 def gate_single_map_odom(ctx: GateContext, mode: str) -> None:
     """Exactly one publisher of map->odom. Two silently fight and the resulting
     pose is neither, which is indistinguishable from bad navigation."""
-    ctx.spin(2.0)
+    # The lookup below blocks for its own timeout, so this only needs to let
+    # the TF listener attach - it does not have to wait out the transform.
+    ctx.spin(0.3)
     try:
         ctx.buf.lookup_transform('map', 'odom', rclpy.time.Time(),
-                                 timeout=Duration(seconds=3.0))
+                                 timeout=Duration(seconds=5.0))
     except Exception as e:                                   # noqa: BLE001
         raise GateFailure(f'no map->odom in mode={mode}: {e}') from e

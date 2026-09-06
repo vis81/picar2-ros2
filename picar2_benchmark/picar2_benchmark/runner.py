@@ -10,6 +10,7 @@ discarded by the caller rather than averaged in.
 from __future__ import annotations
 
 import argparse
+import concurrent.futures as cf
 import json
 import math
 import os
@@ -158,10 +159,18 @@ def effective_params() -> dict:
         ('/controller_server', 'controller_frequency'),
         ('/planner_server', 'GridBased.motion_model_for_search'),
     ]
-    out = {}
-    for node, param in wanted:
+    # In parallel: each `ros2 param get` spawns a python process that takes
+    # over a second to reach the point of asking, and five of them in series
+    # cost more than the drive being measured. They are independent reads.
+    def _one(node_param):
+        node, param = node_param
         r = subprocess.run(['ros2', 'param', 'get', node, param],
                            capture_output=True, text=True, timeout=20)
+        return node_param, r
+    out = {}
+    with cf.ThreadPoolExecutor(max_workers=len(wanted)) as ex:
+        results = list(ex.map(_one, wanted))
+    for (node, param), r in results:
         val = r.stdout.strip().split('value is:')[-1].strip()
         out[f'{node.rsplit("/", 1)[-1]}.{param}'] = val or 'unavailable'
     return out
@@ -460,18 +469,22 @@ def run_trial(scenario: str, mode: str, out_dir: Path, gen_dir: Path,
 
         rclpy.init()
         ctx = gates.GateContext()
+        _t = time.time()
         gates.wait_for_ground_truth(ctx)
         gates.gate_spawn_pose(ctx, sc.start)
         gates.gate_settle(ctx)
         gates.gate_motion(ctx)
         reset_pose(sc)
-        ctx.spin(2.0)
+        # gate_settle below already waits for the robot to be still, so this
+        # only has to let the teleport land.
+        ctx.spin(0.5)
         gates.gate_settle(ctx)
         # back on the exact start pose, so the measurement matches the spec
         gates.gate_spawn_pose(ctx, sc.start)
         gates.gate_single_map_odom(ctx, mode)
         gates.gate_costmap(ctx, sc, mode)
-        _hlog(logs, 'gates passed')
+        _hlog(logs, f'gates passed in {time.time() - _t:.1f}s')
+        _t = time.time()
         result['gates'] = 'passed'
         try:
             result['effective'] = effective_params()
@@ -479,9 +492,10 @@ def run_trial(scenario: str, mode: str, out_dir: Path, gen_dir: Path,
             result['effective'] = {'error': repr(e)}
 
         rec = Recorder(ctx, sc.all_boxes, mode)
-        ctx.spin(1.0)                       # let the subscriptions connect
+        ctx.spin(0.5)                       # let the subscriptions connect
         # only SLAM has to wait for the world to be observed
         warmup = 60.0 if mode == 'slam' else 0.0
+        _hlog(logs, f'setup done in {time.time() - _t:.1f}s')
         _hlog(logs, f'goal sent x={sc.goal.x} y={sc.goal.y} yaw={sc.goal.yaw}')
         run = GoalRunner(ctx, sc.timeout_s, rec, warmup).run(sc.goal, sc.start)
         result.update(run)
