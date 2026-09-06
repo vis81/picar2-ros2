@@ -15,7 +15,18 @@ ackermann_steering_controller:
   ros__parameters:
     # Joint names (non-deprecated form)
     traction_joints_names: [back_right_joint, back_left_joint]
-    steering_joints_names: [front_left_steer_joint, front_right_steer_joint]
+    # RIGHT first, then LEFT - the order steering_kinematics.cpp returns:
+    #   steering_commands = {alpha_r, alpha_l}
+    # matching traction_joints_names above. Listed left-first, the inner and
+    # outer steering angles land on the wrong wheels and the front axle is
+    # commanded onto two arcs with no common centre, so a wheel must slide.
+    # Measured in sim before the fix: on a left turn the left wheel held
+    # 0.4498 rad while the right held 0.6000, the outer wheel steering the
+    # harder of the two, and the front wheels rolled 1.5 m over a 3.3 m path
+    # against 3.7 m at the rear.
+    # Invisible on the robot: picar2_hardware averages the two steering
+    # commands into one servo, and swapping a pair does not change its mean.
+    steering_joints_names: [front_right_steer_joint, front_left_steer_joint]
 
     # Robot geometry (metres) — from URDF joint origins
     wheelbase:             0.235    # 0.11922 + 0.11607

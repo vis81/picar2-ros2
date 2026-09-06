@@ -358,7 +358,7 @@
 
   <!-- Front wheels (passive — follow steer knuckle) -->
   <joint name="front_left_wheel_joint" type="continuous">
-    <origin xyz="0.00022897 0.0228 -0.0141" rpy="0 0 -0.010042"/>
+    <origin xyz="0.00022897 0.0228 -0.0137" rpy="0 0 -0.010042"/>   <!-- EXPERIMENT: front wheels coplanar with the rears -->
     <parent link="front_left_steer"/>
     <child  link="front_left_wheel"/>
     <!-- +y like every other wheel. This was -y, so the joint reported the
@@ -369,15 +369,25 @@
          passive, state-only - but it made /joint_states describe a robot that
          cannot exist. -->
     <axis xyz="0 1 0"/>
-    <dynamics damping="0.01" friction="0.0"/>
+    <!-- Passive wheels: essentially no bearing drag. At 0.01 the damping torque
+         is 0.10 N.m at driving speed (10 rad/s), while mu=0.5 on a 0.81 kg robot
+         supplies only 0.02-0.03 N.m to spin the wheel up - so the wheel could
+         sustain just 3.3 rad/s against the 10.6 the ground demands, and slid
+         instead of rolling. The outer wheel of a turn needs the higher rate, so
+         it stalled first and the stall swapped sides with the turn direction:
+         visible in Gazebo, and in the logs as the inner wheel rotating MORE than
+         the outer (left turn: front_left +53.4 rad against front_right +40.2).
+         The driven rear wheels keep 0.01 - their velocity controller overcomes
+         it. -->
+    <dynamics damping="0.0001" friction="0.0"/>
   </joint>
 
   <joint name="front_right_wheel_joint" type="continuous">
-    <origin xyz="-0.00025662 -0.019549 -0.0121" rpy="0 0 -0.013126"/>
+    <origin xyz="-0.00025662 -0.019549 -0.0117" rpy="0 0 -0.013126"/>   <!-- EXPERIMENT -->
     <parent link="front_right_steer"/>
     <child  link="front_right_wheel"/>
     <axis xyz="0 1 0"/>
-    <dynamics damping="0.01" friction="0.0"/>
+    <dynamics damping="0.0001" friction="0.0"/>   <!-- see front_left above -->
   </joint>
 
   <!-- Sensors (fixed) -->
