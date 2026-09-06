@@ -428,6 +428,16 @@ def run_trial(scenario: str, mode: str, out_dir: Path, gen_dir: Path,
     result: dict = {'scenario': sc.name, 'mode': mode, 'sensor_noise': sensor_noise,
                     'config': (Path(bt).stem if bt else
                                Path(overlay).stem if overlay else 'baseline')}
+    # A missing overlay is not an error to launch_ros: it warns "Parameter file
+    # path is not a file" and runs the baseline, so the trial records a config
+    # it never used. Two mitigation results were read as null that way - the
+    # files existed in source but colcon had not re-globbed them into share/.
+    for label, path in (('overlay', overlay), ('bt', bt)):
+        if path and not Path(path).is_file():
+            return {**result, 'outcome': 'RUNNER_ERROR',
+                    'detail': f'{label} file not found: {path} - if you just '
+                              f'added it, rebuild the package so it installs'}
+
     busy = wait_for_quiet_domain()
     if busy:
         return {**result, 'outcome': 'SIM_DEGRADED',
