@@ -361,7 +361,14 @@
     <origin xyz="0.00022897 0.0228 -0.0141" rpy="0 0 -0.010042"/>
     <parent link="front_left_steer"/>
     <child  link="front_left_wheel"/>
-    <axis xyz="0 -1 0"/>
+    <!-- +y like every other wheel. This was -y, so the joint reported the
+         front-left wheel turning backwards while the robot drove forwards:
+         measured over one run, back_left +117.3 rad and front_right +64.4 rad
+         against front_left -34.6 rad. Only the reported state and the visual
+         were affected - the collision is a plain cylinder and the joint is
+         passive, state-only - but it made /joint_states describe a robot that
+         cannot exist. -->
+    <axis xyz="0 1 0"/>
     <dynamics damping="0.01" friction="0.0"/>
   </joint>
 

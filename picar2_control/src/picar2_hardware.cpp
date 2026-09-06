@@ -555,10 +555,14 @@ hardware_interface::return_type Picar2Hardware::read(
   steer_slew_rad_ += std::clamp(err, -steer_max_rate_ * dt, steer_max_rate_ * dt);
   pos_steer_left_  = steer_slew_rad_;
   pos_steer_right_ = steer_slew_rad_;
-  // Front wheels passive — estimate from rear average; left axis mirrored in URDF
+  // Front wheels passive - estimate from the rear average. Both are positive:
+  // the front-left URDF axis used to be mirrored (0 -1 0) and this negation
+  // cancelled it, so the pair only looked right while both were wrong. The axis
+  // now matches the other three wheels, so the negation goes with it - leaving
+  // it would show the front-left wheel running backwards in /joint_states.
   double avg_rear = (pos_back_left_ + pos_back_right_) * 0.5;
-  pos_front_left_wheel_  = -avg_rear;
-  pos_front_right_wheel_ =  avg_rear;
+  pos_front_left_wheel_  = avg_rear;
+  pos_front_right_wheel_ = avg_rear;
   // Pan/tilt: open-loop — state follows commanded position
   pos_pan_  = cmd_pan_;
   pos_tilt_ = cmd_tilt_;
