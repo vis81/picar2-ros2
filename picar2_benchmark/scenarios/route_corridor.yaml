@@ -1,0 +1,33 @@
+name: route_corridor
+description: >
+  Three waypoints along an L-shaped corridor 1.8 m wide, driven once. The
+  corridor is the same width as corner_left/corner_right, so the geometry is
+  known to be drivable by this robot.
+
+  What this adds over those is the middle waypoint, which sits in the corner
+  itself. A rolling NavigateThroughPoses window plans through several waypoints
+  at once, and the risk in a confined space is that the planner cuts the corner
+  — producing a smooth path that never comes near the waypoint it was supposed
+  to pass through. Nav2 would report that route SUCCEEDED. Ground truth is what
+  catches it, which is why arrival is measured here and never taken from the
+  action result.
+
+  One lap, not looping: the return leg through the same corner adds nothing that
+  the outbound leg has not already tested.
+world: {size: [8.0, 8.0], rtf: 0.5, max_step: 0.001}
+obstacles:
+  - {x:  0.00, y:  0.90, sx: 6.8, sy: 0.2}   # outer wall, incoming leg
+  - {x: -2.15, y: -0.90, sx: 2.7, sy: 0.2}   # inner corner wall
+  - {x:  2.15, y: -1.50, sx: 0.2, sy: 4.8}   # outer wall, outgoing leg
+  - {x:  0.35, y: -2.40, sx: 0.2, sy: 3.0}   # inner wall, outgoing leg
+start: {x: -2.60, y: 0.00, yaw: 0.0}
+goal:  {x: 0.0, y: 0.0, yaw: 0.0}     # unused on a route; kept for the loader
+route:
+  loop: false
+  laps: 1
+  timeout_s: 240
+  capture_radius_m: 0.45
+  waypoints:
+    - {x: -0.60, y:  0.00, yaw:  0.0}      # mid incoming leg
+    - {x:  1.25, y:  0.00, yaw: -0.7854}   # in the corner itself
+    - {x:  1.25, y: -2.60, yaw: -1.5708}   # down the outgoing leg

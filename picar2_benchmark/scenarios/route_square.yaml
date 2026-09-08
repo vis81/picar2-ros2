@@ -1,0 +1,35 @@
+name: route_square
+description: >
+  Four waypoints round an open rectangle, driven as a loop for two laps. No
+  obstacles: a poor result here is the route machinery and the controller, not
+  the geometry.
+
+  This is the scenario the two driving modes are compared on. Run it with
+  --route-mode stop and --route-mode flow and the numbers should reproduce what
+  the real robot showed on a four-waypoint loop: flow noticeably quicker per lap
+  AND closer to each waypoint, which is the opposite of the trade one expects
+  from a controller that never stops. Stopping is what costs accuracy — an
+  Ackermann car converging on a goal checker parks wherever its turning radius
+  allows, then shuffles.
+
+  Two laps rather than one because the interesting part of a loop is the wrap:
+  driving past the last waypoint and back to the first without stopping is a
+  different code path from reaching the end of a list.
+
+  The 3.0 x 4.0 m rectangle keeps every leg well clear of both the 0.45 m
+  capture radius and the 0.5 m minimum turning radius, so a missed waypoint
+  means the route was driven wrong rather than that it was impossible.
+world: {size: [10.0, 8.0], rtf: 0.5, max_step: 0.001}
+obstacles: []
+start: {x: -2.0, y: -2.0, yaw: 0.0}
+goal:  {x: 0.0, y: 0.0, yaw: 0.0}     # unused on a route; kept for the loader
+route:
+  loop: true
+  laps: 2
+  timeout_s: 300
+  capture_radius_m: 0.45
+  waypoints:
+    - {x:  2.0, y: -2.0, yaw:  1.5708}
+    - {x:  2.0, y:  2.0, yaw:  3.1416}
+    - {x: -2.0, y:  2.0, yaw: -1.5708}
+    - {x: -2.0, y: -2.0, yaw:  0.0}

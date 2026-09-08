@@ -61,6 +61,18 @@ class Scenario:
     # has no goal pose: the task is to map the space, so the run ends on
     # coverage or on the map ceasing to grow, not on arrival.
     explore: dict | None = None
+    # Present on route scenarios. A route is a list of waypoints driven in
+    # order, optionally looping. It is its own task because the thing being
+    # measured is not arrival at one pose but whether every waypoint was
+    # actually passed close to, in order — the failure mode a single goal
+    # cannot express.
+    route: dict | None = None
+
+    @property
+    def route_waypoints(self) -> list[Pose]:
+        if not self.route:
+            return []
+        return [_pose(w) for w in self.route.get('waypoints', [])]
 
     @property
     def walls(self) -> list[Box]:
@@ -183,6 +195,52 @@ def free_area_m2(sc: 'Scenario', resolution: float = 0.05) -> float:
     return float((img == FREE).sum()) * resolution * resolution
 
 
+def _validate_route(sc: 'Scenario') -> None:
+    """Reject a route that cannot be driven, rather than reporting the refusal
+    as a navigation result."""
+    from .geometry import clearance
+
+    r = sc.route
+    wps = sc.route_waypoints
+    w, h = sc.size
+    if len(wps) < 2:
+        raise ValueError(f'{sc.name}: a route needs at least two waypoints')
+    if int(r.get('laps', 1)) < 1:
+        raise ValueError(f'{sc.name}: route.laps must be at least 1')
+    if r.get('laps', 1) > 1 and not r.get('loop', False):
+        raise ValueError(f'{sc.name}: route.laps > 1 requires route.loop: true')
+
+    for i, p in enumerate(wps):
+        if abs(p.x) > w / 2 or abs(p.y) > h / 2:
+            raise ValueError(
+                f'{sc.name}: waypoint {i} ({p.x}, {p.y}) is outside the world')
+        c = clearance((p.x, p.y, p.yaw), sc.all_boxes)
+        if c <= 0.0:
+            raise ValueError(f'{sc.name}: waypoint {i} overlaps an obstacle '
+                             f'(clearance {c:.3f} m)')
+
+    # Waypoints closer together than the capture radius cannot be told apart:
+    # the robot would be inside both at once and the run could not say which
+    # one it passed.
+    cap = float(r.get('capture_radius_m', 0.45))
+    ring = list(zip(wps, wps[1:] + ([wps[0]] if r.get('loop') else [])))
+    for i, (a, b) in enumerate(ring):
+        d = math.dist((a.x, a.y), (b.x, b.y))
+        if d < 2 * cap:
+            raise ValueError(
+                f'{sc.name}: waypoints {i} and {(i + 1) % len(wps)} are {d:.2f} m '
+                f'apart, closer than twice the {cap:.2f} m capture radius; a pass '
+                f'through one cannot be distinguished from a pass through the other')
+
+    # No slam_envelope check here, unlike a goal scenario. Route trials run in
+    # ground_truth only — every metric is a distance between where the robot
+    # really was and where a waypoint really is, and under slam the map frame is
+    # anchored at the start pose, so those numbers would measure localisation
+    # error rather than driving accuracy. The costmap comes from the static map,
+    # which covers the whole world, so lidar visibility does not constrain where
+    # a waypoint may sit.
+
+
 def _pose(d: dict) -> Pose:
     return Pose(float(d['x']), float(d['y']), float(d.get('yaw', 0.0)))
 
@@ -200,6 +258,7 @@ def load(path: str | Path) -> Scenario:
                    for o in raw.get('obstacles', [])],
         timeout_s=float(raw.get('timeout_s', 90.0)),
         explore=raw.get('explore'),
+        route=raw.get('route'),
         rtf=float(world.get('rtf', 0.5)),
         max_step=float(world.get('max_step', 0.001)),
         description=raw.get('description', ''),
@@ -214,8 +273,13 @@ def validate(sc: Scenario) -> None:
     from .geometry import clearance
 
     w, h = sc.size
-    checked = (('start', sc.start),) if sc.explore else (('start', sc.start),
-                                                         ('goal', sc.goal))
+    if sc.explore and sc.route:
+        raise ValueError(f'{sc.name}: a scenario is either an exploration or a '
+                         f'route, not both')
+    if sc.explore or sc.route:
+        checked = (('start', sc.start),)
+    else:
+        checked = (('start', sc.start), ('goal', sc.goal))
     for label, p in checked:
         if abs(p.x) > w / 2 or abs(p.y) > h / 2:
             raise ValueError(f'{sc.name}: {label} ({p.x}, {p.y}) is outside the world')
@@ -229,6 +293,9 @@ def validate(sc: Scenario) -> None:
             raise ValueError(f'{sc.name}: explore.duration_s must be positive')
         if not 0 < float(e.get('target_coverage', 0.95)) <= 1.0:
             raise ValueError(f'{sc.name}: explore.target_coverage must be in (0, 1]')
+        return
+    if sc.route:
+        _validate_route(sc)
         return
     if math.dist((sc.start.x, sc.start.y), (sc.goal.x, sc.goal.y)) < 0.5:
         raise ValueError(f'{sc.name}: goal is within 0.5 m of start; nothing to measure')

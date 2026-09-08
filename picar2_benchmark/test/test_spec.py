@@ -100,3 +100,75 @@ def test_free_area_matches_the_geometry():
     sc = spec.Scenario(name='r', size=(8.0, 6.0),
                        start=spec.Pose(-3.0, -2.0, 0.0), goal=spec.Pose(0.0, 0.0, 0.0))
     assert abs(spec.free_area_m2(sc) - 48.0) < 1.0     # 8 x 6 less wall rounding
+
+
+def _route(**over):
+    """A minimal valid route scenario, for the rejection tests to spoil."""
+    r = {'loop': False, 'laps': 1,
+         'waypoints': [{'x': -1.5, 'y': 0.0}, {'x': 1.5, 'y': 0.0}]}
+    r.update(over)
+    return spec.Scenario(name='x', size=(8.0, 6.0),
+                         start=spec.Pose(-2.5, 0.0, 0.0),
+                         goal=spec.Pose(0.0, 0.0, 0.0), route=r)
+
+
+def test_route_scenario_validates_without_a_reachable_goal():
+    """A route has no single goal, so the goal-distance and slam-envelope
+    checks a navigation scenario must pass do not apply. Route trials run in
+    ground_truth only, where the costmap comes from the static map."""
+    spec.validate(_route())
+
+
+def test_route_needs_at_least_two_waypoints():
+    with pytest.raises(ValueError, match='at least two waypoints'):
+        spec.validate(_route(waypoints=[{'x': 1.0, 'y': 0.0}]))
+
+
+def test_route_rejects_waypoints_too_close_to_tell_apart():
+    """Closer than twice the capture radius and the robot is inside both at
+    once, so a pass through one cannot be attributed."""
+    with pytest.raises(ValueError, match='capture radius'):
+        spec.validate(_route(waypoints=[{'x': 0.0, 'y': 0.0},
+                                        {'x': 0.5, 'y': 0.0}]))
+
+
+def test_route_rejects_a_waypoint_outside_the_world():
+    with pytest.raises(ValueError, match='outside the world'):
+        spec.validate(_route(waypoints=[{'x': -1.5, 'y': 0.0},
+                                        {'x': 99.0, 'y': 0.0}]))
+
+
+def test_route_rejects_a_waypoint_inside_an_obstacle():
+    sc = spec.Scenario(name='x', size=(8.0, 6.0),
+                       start=spec.Pose(-2.5, 0.0, 0.0),
+                       goal=spec.Pose(0.0, 0.0, 0.0),
+                       obstacles=[spec.Box(1.5, 0.0, 0.6, 0.6)],
+                       route={'loop': False, 'laps': 1,
+                              'waypoints': [{'x': -1.5, 'y': 0.0},
+                                            {'x': 1.5, 'y': 0.0}]})
+    with pytest.raises(ValueError, match='overlaps an obstacle'):
+        spec.validate(sc)
+
+
+def test_route_laps_require_a_loop():
+    """Driving the list twice without looping would just stop at the end."""
+    with pytest.raises(ValueError, match='requires route.loop'):
+        spec.validate(_route(laps=2, loop=False))
+    spec.validate(_route(laps=2, loop=True))
+
+
+def test_a_scenario_is_a_route_or_an_exploration_not_both():
+    with pytest.raises(ValueError, match='not both'):
+        spec.validate(spec.Scenario(
+            name='x', size=(8.0, 6.0), start=spec.Pose(-2.5, 0.0, 0.0),
+            goal=spec.Pose(0.0, 0.0, 0.0),
+            explore={'duration_s': 60},
+            route={'waypoints': [{'x': -1.5, 'y': 0.0}, {'x': 1.5, 'y': 0.0}]}))
+
+
+def test_route_waypoints_carry_their_heading():
+    sc = _route(waypoints=[{'x': -1.5, 'y': 0.0, 'yaw': 1.0},
+                           {'x': 1.5, 'y': 0.0}])
+    w = sc.route_waypoints
+    assert (w[0].x, w[0].yaw) == (-1.5, 1.0)
+    assert w[1].yaw == 0.0          # absent heading defaults, never crashes

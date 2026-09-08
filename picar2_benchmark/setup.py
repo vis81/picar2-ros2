@@ -30,6 +30,7 @@ setup(
             'gt_localizer = picar2_benchmark.gt_localizer:main',
             'bench-run = picar2_benchmark.runner:main',
             'bench-explore = picar2_benchmark.explore_runner:main',
+            'bench-route = picar2_benchmark.route_runner:main',
             'bench-report = picar2_benchmark.report:main',
             'bench-plan-sweep = picar2_benchmark.plan_sweep:main',
         ],
