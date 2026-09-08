@@ -64,6 +64,9 @@ class GateContext(Node):
 
 
 def wait_for_ground_truth(ctx: GateContext, timeout: float = 60.0) -> None:
+    # Which poses must be covered. Defaults to the goal; a route passes its
+    # waypoints instead, since its goal is a placeholder it never drives to.
+    targets = list(targets) if targets is not None else [sc.goal]
     end = time.time() + timeout
     while time.time() < end and ctx.gt is None:
         rclpy.spin_once(ctx, timeout_sec=0.1)
@@ -143,7 +146,8 @@ def gate_motion(ctx: GateContext, speed=0.25, timeout=6.0, min_move=0.05) -> Non
             f'under {speed} m/s for {seconds}s)')
 
 
-def gate_costmap(ctx: GateContext, sc, mode: str, timeout=90.0, min_free=400) -> None:
+def gate_costmap(ctx: GateContext, sc, mode: str, timeout=90.0, min_free=400,
+                 targets=None) -> None:
     """The global costmap is populated and actually covers the scenario.
 
     Without the coverage half, a goal can be sent while the costmap is still the
@@ -189,14 +193,15 @@ def gate_costmap(ctx: GateContext, sc, mode: str, timeout=90.0, min_free=400) ->
             # is for, and it is what the robot does on every real mission.
             if inside_xy(*here):
                 return
-        elif inside_xy(*here) and inside(sc.goal):
+        elif inside_xy(*here) and all(inside(t) for t in targets):
             return
         else:
             # static map modes: the map is known up front, so a costmap that
             # does not span the scenario means the static layer never applied
             raise GateFailure(
                 f'costmap {w:.1f}x{h:.1f} at ({ox:.1f},{oy:.1f}) does not cover '
-                f'start/goal — static map not applied?')
+                f'start and all {len(targets)} target pose(s) — static map not '
+                f'applied?')
     raise GateFailure(
         'global costmap never covered the start pose'
         if mode == 'slam' else 'global costmap never covered start and goal')

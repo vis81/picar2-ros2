@@ -21,11 +21,20 @@ description: >
   The goal sits past the box, so the run can only succeed by going around. The
   world is small because the goal must stay inside what the lidar can see from
   the start, so the scenario is runnable under slam as well as ground_truth.
+
+  The box is 0.6 m wide for a reason. The ToF marks obstacles only within
+  obstacle_max_range, 1.0 m, so that is all the warning there is; a car with a
+  0.5 m minimum turning radius shifts sideways by R(1-cos(s/R)) over an arc s,
+  so clearing a 0.6 m box needs 0.45 m of offset and 0.73 m of travel - inside
+  the warning, with room to spare. A first attempt used a 1.2 m box, which needs
+  1.04 m and is therefore impossible however well the sensor works: all three
+  runs aborted having stopped 4-72 mm short, which is the ToF doing its job and
+  the scenario asking for something the robot cannot do.
 world: {size: [5.0, 5.0], rtf: 0.5, max_step: 0.001}
 obstacles:
   # sz 0.06: under the lidar, over min_obstacle_height.
   # mapped false: the robot has to see it for itself.
-  - {x: 0.0, y: 0.0, sx: 0.5, sy: 1.2, sz: 0.06, mapped: false}
+  - {x: 0.0, y: 0.0, sx: 0.5, sy: 0.6, sz: 0.06, mapped: false}
 start: {x: -1.80, y: 0.0, yaw: 0.0}
 goal:  {x:  1.60, y: 0.0, yaw: 0.0}
 timeout_s: 120

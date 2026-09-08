@@ -297,7 +297,7 @@ def run_trial(scenario: str, out_dir: Path, gen_dir: Path, mode: str = 'flow',
     gen.mkdir(parents=True, exist_ok=True)
     world = gen / f'{sc.name}.sdf'
     world.write_text(world_gen.to_sdf(sc))
-    map_gen.write(sc, gen)
+    _, map_yaml = map_gen.write(sc, gen)
 
     logs = out_dir / 'logs' / f'{sc.name}_{mode}_{int(time.time())}'
     result: dict = {'scenario': sc.name, 'route_mode': mode,
@@ -328,7 +328,8 @@ def run_trial(scenario: str, out_dir: Path, gen_dir: Path, mode: str = 'flow',
         # be measuring localisation error instead of driving accuracy.
         stack.launch([
             'ros2', 'launch', 'picar2_benchmark', 'benchmark_localization.launch.py',
-            'mode:=ground_truth', 'use_sim_time:=true'], logs / 'loc.log')
+            'mode:=ground_truth', f'map_yaml:={map_yaml}', 'use_sim_time:=true'],
+            logs / 'loc.log')
         stack.launch([
             'ros2', 'launch', 'picar2_bringup', 'nav2.launch.py',
             'use_sim_time:=true'], logs / 'nav2.log')
@@ -347,7 +348,10 @@ def run_trial(scenario: str, out_dir: Path, gen_dir: Path, mode: str = 'flow',
         ctx.spin(2.0)
         gates.gate_settle(ctx)
         gates.gate_spawn_pose(ctx, sc.start)
-        gates.gate_costmap(ctx, sc, 'ground_truth')
+        # The waypoints, not sc.goal: a route scenario's goal is a placeholder
+        # kept only so the loader has one, and gating on it would check that
+        # the costmap covers a pose the trial never visits.
+        gates.gate_costmap(ctx, sc, 'ground_truth', targets=sc.route_waypoints)
         _hlog(logs, 'gates passed')
         result['gates'] = 'passed'
 
