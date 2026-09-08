@@ -64,9 +64,6 @@ class GateContext(Node):
 
 
 def wait_for_ground_truth(ctx: GateContext, timeout: float = 60.0) -> None:
-    # Which poses must be covered. Defaults to the goal; a route passes its
-    # waypoints instead, since its goal is a placeholder it never drives to.
-    targets = list(targets) if targets is not None else [sc.goal]
     end = time.time() + timeout
     while time.time() < end and ctx.gt is None:
         rclpy.spin_once(ctx, timeout_sec=0.1)
@@ -154,6 +151,9 @@ def gate_costmap(ctx: GateContext, sc, mode: str, timeout=90.0, min_free=400,
     5x5 m default at the origin — nav2.yaml declares no width/height/origin —
     and the resulting planner failure looks like a navigation result.
     """
+    # Which poses must be covered. Defaults to the goal; a route passes its
+    # waypoints instead, since its goal is a placeholder it never drives to.
+    targets = list(targets) if targets is not None else [sc.goal]
     end = time.time() + timeout
     while time.time() < end:
         rclpy.spin_once(ctx, timeout_sec=0.1)

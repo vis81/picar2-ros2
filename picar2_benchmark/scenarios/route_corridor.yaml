@@ -14,6 +14,15 @@ description: >
 
   One lap, not looping: the return leg through the same corner adds nothing that
   the outbound leg has not already tested.
+
+  Measured, and not what was expected. The corner waypoint is the tightest of
+  the three, at 0.014 m - the window does not cut it at all. The loose one is
+  wp2 at 0.226 m, and that is not corner cutting either: it is the last
+  waypoint of a one-shot route, so by design it is driven as a real goal and
+  the goal checker parks the car within its 0.25 m tolerance rather than
+  passing through. Same mechanism as stop mode, which lands at 0.120 m on
+  route_square. So a flow route is only precise where it flows; wherever it has
+  to stop, it inherits the goal checker's accuracy.
 world: {size: [8.0, 8.0], rtf: 0.5, max_step: 0.001}
 obstacles:
   - {x:  0.00, y:  0.90, sx: 6.8, sy: 0.2}   # outer wall, incoming leg
