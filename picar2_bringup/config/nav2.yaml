@@ -4,7 +4,15 @@ bt_navigator:
     robot_base_frame: base_footprint
     odom_topic: /odom
     bt_loop_duration: 10
-    default_server_timeout: 20
+    # 20 ms is nav2's default and it is far too tight here: it is how long a
+    # BT action node waits for a server to *acknowledge* a goal, and on a Pi 4
+    # running cartographer/AMCL, nav2, ros2_control, the lidar and the ToF, a
+    # scheduling hiccup blows past it routinely. The symptom is a goal that
+    # aborts mid-drive with "Timed out while waiting for action server to
+    # acknowledge goal request" and reads as a navigation failure — observed
+    # ending a waypoint route 0.73 m from its target after two clean legs.
+    # A real server failure is still caught, just half a second later.
+    default_server_timeout: 500
     action_server_result_timeout: 900.0
     # Ackermann cannot spin in place — use BTs that omit spin recovery.
     # default_nav_through_poses_bt_xml is overridden from nav2.launch.py at
