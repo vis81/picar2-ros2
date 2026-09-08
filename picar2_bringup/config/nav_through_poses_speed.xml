@@ -16,6 +16,11 @@
   and 12/12 clean in open driving. Same decorator, same planner, but this tree
   has NOT been measured separately - treat the transfer as expected rather
   than demonstrated.
+
+  RemovePassedGoals trims at 0.3 m, not upstream's 0.7. The web UI's
+  flow-through routes count a waypoint passed at the robot's closest
+  approach within 0.45 m; if the BT stopped routing through a waypoint
+  before the robot got that close, the route would stall on it forever.
 -->
 <root BTCPP_format="4" main_tree_to_execute="MainTree">
   <BehaviorTree ID="MainTree">
@@ -27,7 +32,7 @@
                          min_speed="0.0" max_speed="0.4">
           <RecoveryNode number_of_retries="1" name="ComputePathThroughPoses">
             <ReactiveSequence>
-              <RemovePassedGoals input_goals="{goals}" output_goals="{goals}" radius="0.7"/>
+              <RemovePassedGoals input_goals="{goals}" output_goals="{goals}" radius="0.3"/>
               <ComputePathThroughPoses goals="{goals}" path="{path}" planner_id="{selected_planner}" error_code_id="{compute_path_error_code}"/>
             </ReactiveSequence>
             <Sequence>
