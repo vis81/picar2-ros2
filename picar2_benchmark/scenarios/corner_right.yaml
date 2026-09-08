@@ -23,3 +23,18 @@ obstacles:
 start: {x: -1.55, y: 0.00, yaw: 0.0}
 goal:  {x:  1.25, y: -1.30, yaw: -1.5708}
 timeout_s: 90
+
+# The regression this scenario exists to hold down. Upstream Smac's analytic
+# expansion scored a whole expansion by extrapolating the gap between its first
+# two samples; that gap collapses across a cusp, so a path opening with a
+# reversal scored at a fraction of its true length and won. Every right-hand
+# turn cusped as a result: 105 direction reversals here against corner_left's 0.
+# Fixed in our navigation2 fork (vis81/navigation2, branch picar2/1.3.12), which
+# is exactly the kind of thing a rebase loses quietly.
+#
+# The bound is 10, not 0: this turn does not need a cusp and measures 0 across
+# three runs, but a single legitimate correction should not fail the trial.
+# 105 is what the defect produced, so anything near it fails loudly.
+expect:
+  outcome: SUCCEEDED
+  max_direction_reversals: 10

@@ -50,11 +50,11 @@ def _box_model(name: str, b: Box) -> str:
     return f"""
     <model name='{name}'>
       <static>true</static>
-      <pose>{b.x} {b.y} {WALL_HEIGHT / 2} 0 0 0</pose>
+      <pose>{b.x} {b.y} {b.sz / 2} 0 0 0</pose>
       <link name='link'>
-        <collision name='c'><geometry><box><size>{b.sx} {b.sy} {WALL_HEIGHT}</size>
+        <collision name='c'><geometry><box><size>{b.sx} {b.sy} {b.sz}</size>
           </box></geometry></collision>
-        <visual name='v'><geometry><box><size>{b.sx} {b.sy} {WALL_HEIGHT}</size>
+        <visual name='v'><geometry><box><size>{b.sx} {b.sy} {b.sz}</size>
           </box></geometry>
           <material><ambient>0.5 0.5 0.55 1</ambient>
             <diffuse>0.6 0.6 0.65 1</diffuse></material></visual>

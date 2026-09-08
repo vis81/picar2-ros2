@@ -23,3 +23,10 @@ obstacles:
 start: {x: -1.55, y: 0.00, yaw: 0.0}
 goal:  {x:  1.25, y: 1.30, yaw: 1.5708}
 timeout_s: 90
+
+# The mirror of corner_right's bound. Held to the same number on purpose: the
+# pair only proves left/right parity if both are measured the same way, and a
+# regression that slowed both turns equally would otherwise pass unnoticed.
+expect:
+  outcome: SUCCEEDED
+  max_direction_reversals: 10

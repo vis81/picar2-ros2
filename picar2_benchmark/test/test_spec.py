@@ -172,3 +172,82 @@ def test_route_waypoints_carry_their_heading():
     w = sc.route_waypoints
     assert (w[0].x, w[0].yaw) == (-1.5, 1.0)
     assert w[1].yaw == 0.0          # absent heading defaults, never crashes
+
+
+def test_a_low_box_does_not_occlude_the_lidar():
+    """A 6 cm box is below the LD19's 0.1485 m scan plane, so the lidar sees
+    straight over it. Ray casting has no notion of height, so it has to be told,
+    or a low obstacle would appear to hide everything behind it from a sensor
+    that can see it perfectly well."""
+    tall = spec.Scenario(name='x', size=(6.0, 6.0),
+                         start=spec.Pose(-2.0, 0.0, 0.0),
+                         goal=spec.Pose(2.0, 0.0, 0.0),
+                         obstacles=[spec.Box(0.0, 0.0, 0.5, 1.2)])
+    low = spec.Scenario(name='x', size=(6.0, 6.0),
+                        start=spec.Pose(-2.0, 0.0, 0.0),
+                        goal=spec.Pose(2.0, 0.0, 0.0),
+                        obstacles=[spec.Box(0.0, 0.0, 0.5, 1.2, sz=0.06)])
+    from picar2_benchmark.geometry import ray_hit
+    # Straight ahead, where the box actually sits: the tall one stops the ray
+    # at its near face, the low one does not stop it at all.
+    o = (-2.0, 0.0)
+    assert ray_hit(o, 0.0, tall.all_boxes, 5.0) == pytest.approx(1.75, abs=0.01)
+    assert ray_hit(o, 0.0, [b for b in low.all_boxes
+                            if b.sz >= spec.LIDAR_HEIGHT_M], 5.0) \
+        == pytest.approx(5.0, abs=0.01)
+    # ...so the envelope reaches further with the low box than the tall one.
+    assert spec.slam_envelope(low)[2] > spec.slam_envelope(tall)[2]
+
+
+def test_an_unmapped_obstacle_stays_out_of_the_static_map():
+    """The only way to test that a sensor still works: a mapped obstacle is
+    planned around whether or not anything ever detects it."""
+    from picar2_benchmark import map_gen
+    base = dict(name='x', size=(5.0, 5.0), start=spec.Pose(-1.5, 0.0, 0.0),
+                goal=spec.Pose(1.5, 0.0, 0.0))
+    seen = spec.Scenario(**base, obstacles=[spec.Box(0, 0, .5, 1.2, .06, True)])
+    hidden = spec.Scenario(**base, obstacles=[spec.Box(0, 0, .5, 1.2, .06, False)])
+    a, _ = map_gen.rasterise(seen, 0.05)
+    b, _ = map_gen.rasterise(hidden, 0.05)
+    assert (a != map_gen.FREE).sum() > (b != map_gen.FREE).sum()
+
+
+def test_expectations_compare_against_the_result_and_its_metrics():
+    sc = spec.Scenario(name='x', size=(6.0, 5.0), start=spec.Pose(-2.0, 0, 0),
+                       goal=spec.Pose(2.0, 0, 0),
+                       expect={'outcome': 'SUCCEEDED',
+                               'max_direction_reversals': 10})
+    ok = spec.check_expectations(
+        sc, {'outcome': 'SUCCEEDED', 'metrics': {'direction_reversals': 0}})
+    assert ok['passed'] and ok['failed'] == 0
+
+    bad = spec.check_expectations(
+        sc, {'outcome': 'SUCCEEDED', 'metrics': {'direction_reversals': 105}})
+    assert not bad['passed'] and bad['failed'] == 1
+    assert [c['check'] for c in bad['checks'] if not c['ok']] \
+        == ['max_direction_reversals']
+
+
+def test_an_unmeasured_metric_fails_rather_than_passes_silently():
+    """A bound on something that was never recorded must not read as met."""
+    sc = spec.Scenario(name='x', size=(6.0, 5.0), start=spec.Pose(-2.0, 0, 0),
+                       goal=spec.Pose(2.0, 0, 0),
+                       expect={'max_nonexistent_thing': 1})
+    r = spec.check_expectations(sc, {'outcome': 'SUCCEEDED'})
+    assert not r['passed']
+    assert 'not measured' in r['checks'][0]['detail']
+
+
+def test_a_scenario_without_expectations_cannot_fail_them():
+    sc = spec.Scenario(name='x', size=(6.0, 5.0), start=spec.Pose(-2.0, 0, 0),
+                       goal=spec.Pose(2.0, 0, 0))
+    assert spec.check_expectations(sc, {'outcome': 'ABORTED'}) == {}
+
+
+def test_min_bounds_are_honoured():
+    sc = spec.Scenario(name='x', size=(6.0, 5.0), start=spec.Pose(-2.0, 0, 0),
+                       goal=spec.Pose(2.0, 0, 0),
+                       expect={'min_min_clearance_m': 0.0})
+    assert spec.check_expectations(sc, {'metrics': {'min_clearance_m': 0.12}})['passed']
+    assert not spec.check_expectations(
+        sc, {'metrics': {'min_clearance_m': -0.03}})['passed']

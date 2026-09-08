@@ -566,15 +566,30 @@ def main(argv=None) -> int:
                     help='skip the raw pose/command dump (on by default)')
     ap.add_argument('--no-bag', dest='bag', action='store_false',
                     help='skip the rosbag (on by default)')
+    ap.add_argument('--strict', action='store_true',
+                    help="fail if the scenario's declared expectations are not "
+                         'met. Off by default: one trial is noisy, which is why '
+                         'RUNS defaults above 1, so the gate belongs in the '
+                         'report across runs rather than on a single result.')
     a = ap.parse_args(argv)
     out = Path(a.out)
     out.mkdir(parents=True, exist_ok=True)
     res = run_trial(a.scenario, a.mode, out, Path('/tmp/picar2_bench'), a.keep_up,
                     a.sensor_noise, a.overlay, a.bt, a.trajectory, a.bag)
+    exp = spec.check_expectations(spec.load(a.scenario), res)
+    if exp:
+        res['expectations'] = exp
     name = (f"{res['scenario']}_{a.mode}_{res['config']}_"
             f"n{a.sensor_noise}_{int(time.time())}.json")
     (out / name).write_text(json.dumps(res, indent=2))
     print(json.dumps(res, indent=2))
+    if exp and not exp['passed']:
+        for c in exp['checks']:
+            if not c['ok']:
+                print(f"  EXPECTATION FAILED  {c['check']}: want {c['want']}, "
+                      f"got {c['got']}" + (f" ({c['detail']})" if c.get('detail') else ''))
     # A failed navigation is a legitimate result, not a tooling error — only an
     # unmeasurable trial should make the caller (or make) report failure.
+    if a.strict and exp and not exp['passed']:
+        return 1
     return 1 if res.get('outcome') in ('SIM_DEGRADED', 'RUNNER_ERROR') else 0

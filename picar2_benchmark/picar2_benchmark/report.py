@@ -19,7 +19,10 @@ METRICS = ['time_s', 'gt_path_m', 'detour_ratio', 'mean_speed_mps',
            'loc_error_mean_m', 'loc_error_max_m',
            'loc_drift_mean_m', 'loc_drift_max_m',
            'direction_reversals', 'stall_total_s',
-           'wall_time_s', 'rtf_achieved']
+           'wall_time_s', 'rtf_achieved',
+           # route trials
+           'approach_mean_m', 'approach_max_m', 'missed_waypoints',
+           'lap_time_s', 'passes']
 
 
 def load(results_dir: str | Path) -> list[dict]:

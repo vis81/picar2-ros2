@@ -31,6 +31,17 @@ class Box:
     y: float
     sx: float
     sy: float
+    # Height. Walls default to full height; a low box is how an obstacle the
+    # lidar cannot see is expressed — the LD19 scan plane sits 0.1485 m above
+    # the ground, so anything shorter is invisible to it and only the front
+    # ToF can find it.
+    sz: float = 1.0
+    # Whether the box appears in the static map. An unmapped obstacle exists in
+    # the simulated world but not in the map the planner starts from, so the
+    # robot has to discover it with its sensors. That is the only way to test
+    # that a sensor is still doing its job: a mapped obstacle is avoided by the
+    # planner whether or not anything ever detects it.
+    mapped: bool = True
 
     @property
     def bounds(self) -> tuple[float, float, float, float]:
@@ -67,6 +78,9 @@ class Scenario:
     # actually passed close to, in order — the failure mode a single goal
     # cannot express.
     route: dict | None = None
+    # Declared bounds on the trial result — see check_expectations. Optional:
+    # a scenario with none is measured but cannot fail.
+    expect: dict | None = None
 
     @property
     def route_waypoints(self) -> list[Pose]:
@@ -98,6 +112,13 @@ class Scenario:
 # lidar got an actual return.
 LIDAR_MAX_RANGE = 5.0
 
+# LD19 scan plane above the ground: base_link 0.0215 m + the lidar's 0.127 m
+# mount in picar2.urdf.xacro. A box shorter than this does not occlude the
+# lidar — it sees straight over it — so ray casting must ignore one, or a low
+# obstacle would appear to hide everything behind it from a sensor that can
+# see it perfectly well.
+LIDAR_HEIGHT_M = 0.1485
+
 
 def slam_envelope(sc: 'Scenario', max_range: float = LIDAR_MAX_RANGE,
                   rays: int = 360) -> tuple[float, float, float, float]:
@@ -121,9 +142,10 @@ def slam_envelope(sc: 'Scenario', max_range: float = LIDAR_MAX_RANGE,
     o = (sc.start.x, sc.start.y)
     xs: list[float] = []
     ys: list[float] = []
+    tall = [b for b in sc.all_boxes if b.sz >= LIDAR_HEIGHT_M]
     for i in range(rays):
         a = 2.0 * math.pi * i / rays
-        d = ray_hit(o, a, sc.all_boxes, max_range)
+        d = ray_hit(o, a, tall, max_range)
         if d is None:
             continue
         xs.append(o[0] + d * math.cos(a))
@@ -241,6 +263,44 @@ def _validate_route(sc: 'Scenario') -> None:
     # a waypoint may sit.
 
 
+def check_expectations(sc: 'Scenario', result: dict) -> dict:
+    """Compare a trial result against the scenario's declared expectations.
+
+    A benchmark that only records numbers cannot fail, and a regression nobody
+    reads is not caught. `expect:` puts the bound next to the geometry it
+    belongs to, so a scenario written to pin down one behaviour says what it is
+    pinning down.
+
+    Vocabulary is deliberately tiny: `outcome`, and `max_<key>` / `min_<key>`
+    for any key in the result or its metrics block.
+    """
+    exp = getattr(sc, 'expect', None) or {}
+    if not exp:
+        return {}
+    merged = {**(result.get('metrics') or {}), **result}
+    checks: list[dict] = []
+    for key, want in exp.items():
+        if key == 'outcome':
+            got = merged.get('outcome')
+            checks.append({'check': 'outcome', 'want': want, 'got': got,
+                           'ok': got == want})
+            continue
+        if key.startswith(('max_', 'min_')):
+            bound, metric = key[:3], key[4:]
+            got = merged.get(metric)
+            if got is None:
+                checks.append({'check': key, 'want': want, 'got': None,
+                               'ok': False, 'detail': f'{metric} not measured'})
+                continue
+            ok = got <= want if bound == 'max' else got >= want
+            checks.append({'check': key, 'want': want, 'got': got, 'ok': ok})
+            continue
+        checks.append({'check': key, 'want': want, 'got': None, 'ok': False,
+                       'detail': 'unknown expectation; use outcome, max_* or min_*'})
+    failed = [c for c in checks if not c['ok']]
+    return {'checks': checks, 'failed': len(failed), 'passed': not failed}
+
+
 def _pose(d: dict) -> Pose:
     return Pose(float(d['x']), float(d['y']), float(d.get('yaw', 0.0)))
 
@@ -254,11 +314,14 @@ def load(path: str | Path) -> Scenario:
         size=(size[0], size[1]),
         start=_pose(raw['start']),
         goal=_pose(raw['goal']),
-        obstacles=[Box(float(o['x']), float(o['y']), float(o['sx']), float(o['sy']))
+        obstacles=[Box(float(o['x']), float(o['y']), float(o['sx']),
+                       float(o['sy']), float(o.get('sz', 1.0)),
+                       bool(o.get('mapped', True)))
                    for o in raw.get('obstacles', [])],
         timeout_s=float(raw.get('timeout_s', 90.0)),
         explore=raw.get('explore'),
         route=raw.get('route'),
+        expect=raw.get('expect'),
         rtf=float(world.get('rtf', 0.5)),
         max_step=float(world.get('max_step', 0.001)),
         description=raw.get('description', ''),

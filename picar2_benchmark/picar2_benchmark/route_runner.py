@@ -395,11 +395,21 @@ def main(argv=None) -> int:
     out.mkdir(parents=True, exist_ok=True)
     res = run_trial(a.scenario, out, Path('/tmp/picar2_bench'), a.route_mode,
                     a.keep_up, a.sensor_noise, a.bag)
+    exp = spec.check_expectations(spec.load(a.scenario), res)
+    if exp:
+        res['expectations'] = exp
     name = (f"{res['scenario']}_route_{a.route_mode}_n{a.sensor_noise}_"
             f"{int(time.time())}.json")
     (out / name).write_text(json.dumps(res, indent=2))
     print(json.dumps(res, indent=2))
     # A route that completed but missed waypoints is a failure, however
     # cheerfully Nav2 reported it. That distinction is the whole point.
-    ok = res.get('outcome') == 'SUCCEEDED' and not res.get('missed_waypoints')
+    if exp and not exp['passed']:
+        for c in exp['checks']:
+            if not c['ok']:
+                print(f"  EXPECTATION FAILED  {c['check']}: want {c['want']}, "
+                      f"got {c['got']}")
+    ok = (res.get('outcome') == 'SUCCEEDED'
+          and not res.get('missed_waypoints')
+          and (not exp or exp['passed']))
     return 0 if ok else 1

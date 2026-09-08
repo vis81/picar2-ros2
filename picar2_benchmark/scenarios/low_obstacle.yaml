@@ -1,0 +1,37 @@
+name: low_obstacle
+description: >
+  A 6 cm high box sitting in an otherwise clear straight run, absent from the
+  static map. Nothing but the front ToF can find it.
+
+  The LD19's scan plane is 0.1485 m above the ground, so a 6 cm box is invisible
+  to the lidar. The SEN0628 sits at 0.0755 m looking level with a 45 degree
+  vertical field of view, so the box is well inside what it can see. Leaving the
+  box out of the map is what makes the test mean anything: a mapped obstacle is
+  planned around whether or not any sensor ever detects it, so the scenario
+  would pass with the ToF unplugged.
+
+  This guards the fix for the carpet false positives. The ToF marks the floor as
+  an obstacle on carpet because it is aimed slightly into the ground - its
+  bottom ray meets the floor 0.18 m ahead - and only min_obstacle_height's 3 cm
+  separates floor from obstacle. Every way of quieting that risks blinding the
+  sensor to the low obstacles it exists to catch. Raise min_obstacle_height past
+  0.06, or pull obstacle_max_range in below the range the box is first seen at,
+  and this scenario fails. That is the point of it.
+
+  The goal sits past the box, so the run can only succeed by going around. The
+  world is small because the goal must stay inside what the lidar can see from
+  the start, so the scenario is runnable under slam as well as ground_truth.
+world: {size: [5.0, 5.0], rtf: 0.5, max_step: 0.001}
+obstacles:
+  # sz 0.06: under the lidar, over min_obstacle_height.
+  # mapped false: the robot has to see it for itself.
+  - {x: 0.0, y: 0.0, sx: 0.5, sy: 1.2, sz: 0.06, mapped: false}
+start: {x: -1.80, y: 0.0, yaw: 0.0}
+goal:  {x:  1.60, y: 0.0, yaw: 0.0}
+timeout_s: 120
+expect:
+  outcome: SUCCEEDED
+  # Reads as min_(min_clearance_m): the closest the robot ever came to any
+  # obstacle, the low box included, must stay at or above zero. A run that
+  # reports success having driven through the box is the failure to catch.
+  min_min_clearance_m: 0.0

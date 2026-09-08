@@ -41,7 +41,9 @@ def rasterise(sc: Scenario, resolution: float = DEFAULT_RESOLUTION,
     img[r0:r1, c0:c1] = FREE
 
     # ... then every box, walls included, is stamped occupied
-    for b in sc.all_boxes:
+    # Unmapped obstacles are deliberately absent: the robot must find them
+    # with its sensors, which is the whole point of a scenario that tests one.
+    for b in (x for x in sc.all_boxes if x.mapped):
         x0, y0, x1, y1 = b.bounds
         bc0, br0 = to_cell(x0, y0)
         bc1, br1 = to_cell(x1, y1)
