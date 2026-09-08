@@ -179,7 +179,17 @@ local_costmap:
       inflation_layer:
         plugin: nav2_costmap_2d::InflationLayer
         cost_scaling_factor: 5.0
-        inflation_radius: 0.5
+        # This is what RegulatedPurePursuitController checks against when it
+        # projects the footprint forward, and 0.5 m leaves almost no cost-0
+        # corridor indoors: with 0.53 m clear to one side and 0.69 m to the
+        # other it logged 165 "collision ahead" warnings and ran nine backup
+        # recoveries without making progress.
+        # Floor is the footprint's circumscribed radius, 0.315 m (the rear
+        # axle to a front corner: hypot(0.30, 0.095)). Below that Nav2 refuses
+        # Smac's non-circular collision checking outright — "inflation radius
+        # is smaller than the circumscribed radius" — so 0.25 is not available
+        # to this robot however tight the space.
+        inflation_radius: 0.35
       always_send_full_costmap: true
 
 global_costmap:
@@ -230,5 +240,10 @@ global_costmap:
         # which stranded explore_lite: its frontier search only traverses cells
         # of exactly FREE_SPACE, so the robot sat in a 1.6 m2 pocket with zero
         # reachable frontiers. Local costmap keeps 0.5.
-        inflation_radius: 0.40
+        # 0.40 was the answer to the doorway problem and it fixed
+        # dead_end_reverse (3/3 against 1/3 at 0.25, commit b5e24ee).
+        # Lowered again to match the local costmap after waypoint routes
+        # kept stalling in tight spaces — re-check dead_end_reverse if
+        # reverse manoeuvres start failing again.
+        inflation_radius: 0.35
       always_send_full_costmap: true
