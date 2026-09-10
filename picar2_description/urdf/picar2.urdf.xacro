@@ -525,7 +525,12 @@
     </sensor>
   </gazebo>
 
-  <!-- SEN0628 8×8 matrix ToF — depth_camera, 45°×45° FOV, 4 m range -->
+  <!-- SEN0628 8×8 matrix ToF — depth_camera, 60°×60° FOV, 4 m range.
+       60, not 45: the DFRobot wiki gives 60 deg horizontally and vertically
+       (90 diagonal). The driver hardcoded 45 and this matched it, so the sim
+       agreed with a real sensor that was itself being misprojected. Measured
+       on the robot after the driver fix: floor returns recover the ruler
+       height to within 3 mm. -->
   <gazebo reference="sen0628_link">
     <sensor name="sen0628" type="depth_camera">
       <always_on>1</always_on>
@@ -533,7 +538,7 @@
       <topic>/model/picar2/sen0628</topic>
       <gz_frame_id>sen0628_link</gz_frame_id>
       <camera>
-        <horizontal_fov>0.7854</horizontal_fov>
+        <horizontal_fov>1.0472</horizontal_fov>
         <image>
           <width>8</width>
           <height>8</height>
