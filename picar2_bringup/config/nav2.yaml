@@ -178,7 +178,14 @@ local_costmap:
           data_type: PointCloud2
           marking: true
           clearing: true
-          obstacle_max_range: 1.0
+          # 0.85, not 1.0. On carpet the shallow-grazing rays read the tops of
+          # the pile rather than the backing, so the apparent floor rises with
+          # distance: measured 0 cm at 0.5 m and +1.1 cm at 0.6 m, which
+          # extrapolates to the 3 cm min_obstacle_height at 0.89 m. Marking out
+          # to 1.0 m therefore left a band where carpet could mark itself as an
+          # obstacle. Clearing still runs to 1.0 m — clearing on those returns
+          # is harmless, only marking is not.
+          obstacle_max_range: 0.85
           obstacle_min_range: 0.005
           raytrace_max_range: 1.0
           raytrace_min_range: 0.0
@@ -233,7 +240,14 @@ global_costmap:
           data_type: PointCloud2
           marking: true
           clearing: true
-          obstacle_max_range: 1.0
+          # 0.85, not 1.0. On carpet the shallow-grazing rays read the tops of
+          # the pile rather than the backing, so the apparent floor rises with
+          # distance: measured 0 cm at 0.5 m and +1.1 cm at 0.6 m, which
+          # extrapolates to the 3 cm min_obstacle_height at 0.89 m. Marking out
+          # to 1.0 m therefore left a band where carpet could mark itself as an
+          # obstacle. Clearing still runs to 1.0 m — clearing on those returns
+          # is harmless, only marking is not.
+          obstacle_max_range: 0.85
           obstacle_min_range: 0.005
           raytrace_max_range: 1.0
           raytrace_min_range: 0.0
