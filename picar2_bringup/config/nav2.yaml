@@ -155,7 +155,15 @@ local_costmap:
       rolling_window: true
       width: 3
       height: 3
-      resolution: 0.05
+      # 0.025, not the map's 0.05. RPP calls a pose a collision when the
+      # footprint outline rasterises onto a cell marked LETHAL — inflation is
+      # not involved, it compares against 254. At 5 cm cells the robot cannot
+      # resolve a gap smaller than one cell: measured on the F1 route, a
+      # footprint corner 3.9 cm from the nearest marked cell centre read as a
+      # collision and the car stopped dead in a corridor that was open ahead.
+      # Halving the cell halves that quantisation error. Costs 4x the cells,
+      # but this window is only 3 x 3 m (3600 -> 14400).
+      resolution: 0.025
       # base_footprint is at the rear axle; chassis extends ~40 mm behind it
       footprint: "[[-0.04, -0.095], [-0.04, 0.095], [0.30, 0.095], [0.30, -0.095]]"
       plugins: [obstacle_layer, inflation_layer]
@@ -204,7 +212,20 @@ local_costmap:
         # Smac's non-circular collision checking outright — "inflation radius
         # is smaller than the circumscribed radius" — so 0.25 is not available
         # to this robot however tight the space.
-        inflation_radius: 0.35
+        #
+        # 0.32, one step above that floor. The F1 route's tightest point has
+        # 0.33 m of clearance, so at 0.35 no cost-0 corridor exists through it
+        # at all and the planner intermittently reported "no valid path found"
+        # — measured, with the robot looping back to wp0 four times over 138 s
+        # rather than entering the gap. This buys 1 cm of margin, which is all
+        # the geometry allows; the real fix for a gap that tight is a route
+        # that does not use it.
+        #
+        # 0.33, not 0.32: Nav2 reports the circumscribed radius as 0.3273, not
+        # the 0.315 computed above, and below it Smac drops its potential-field
+        # shortcut and checks the full footprint at every node — it says so,
+        # "This will substantially impact run-time performance", once per plan.
+        inflation_radius: 0.33
       always_send_full_costmap: true
 
 global_costmap:
@@ -267,5 +288,8 @@ global_costmap:
         # Lowered again to match the local costmap after waypoint routes
         # kept stalling in tight spaces — re-check dead_end_reverse if
         # reverse manoeuvres start failing again.
-        inflation_radius: 0.35
+        # 0.33: see the local costmap's note. Not lower — Nav2 reports the
+        # circumscribed radius as 0.3273 and below it Smac loses its
+        # potential-field shortcut.
+        inflation_radius: 0.33
       always_send_full_costmap: true

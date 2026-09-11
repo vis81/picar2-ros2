@@ -1,6 +1,12 @@
 ekf_filter_node:
   ros__parameters:
-    frequency: 50.0
+    # 30, not 50. At 50 it could not keep up: 1120 "Failed to meet update
+    # rate" in one session on a Pi at 83% busy. It also publishes
+    # odom->base_footprint, so its rate is most of /tf — measured at 78 Hz,
+    # and deserializing that in Python was 38% of a core in the web UI alone.
+    # Nothing downstream needs 50: the controller runs at 20 Hz, AMCL updates
+    # every 0.10 m, and both interpolate TF.
+    frequency: 30.0
     sensor_timeout: 0.1
     two_d_mode: true
 
