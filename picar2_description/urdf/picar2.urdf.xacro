@@ -33,6 +33,12 @@
              Measured 2026-05-22 from wheel-angle photo; refine with odom_cal circle test. -->
         <param name="steer_lut_us">-595 -454 -410 -364 -329 -299 -271 -252 -202 -151 -121 -101 128 154	193	257	308	354	433	464	493	545</param>
         <param name="steer_lut_rad">0.6756 0.5308 0.4578 0.4058 0.3513 0.3176 0.2790 0.2443 0.1994 0.1392 0.1062 0.0668 -0.1276 -0.1646 -0.2049 -0.2829	-0.3129	-0.3681	-0.4680	-0.4844	-0.5078	-0.6109</param>
+        <!-- 30, not the driver's 50 default. The EKF runs at 50 Hz and is fed
+             IMU at exactly its own rate with no headroom; on the robot it
+             logged 1120 "Failed to meet update rate" in one session while the
+             Pi sat at 83% busy. Madgwick and the EKF both interpolate, and
+             yaw rate is the only IMU channel the EKF consumes. -->
+        <param name="imu_rate_hz">30</param>
         <param name="pan_us_per_rad">500.0</param>
         <param name="tilt_us_per_rad">500.0</param>
       </xacro:unless>

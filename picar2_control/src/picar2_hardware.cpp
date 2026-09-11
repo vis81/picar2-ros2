@@ -30,6 +30,7 @@ static constexpr uint8_t MSG_TIMESYNC      = 0x84;
 static constexpr uint8_t MSG_SERVO_WRITE   = 0x87;
 static constexpr uint8_t STREAM_JOINT      = 0x01;
 static constexpr uint8_t STREAM_IMU        = 0x02;
+static constexpr uint8_t STREAM_BATTERY    = 0x03;
 static constexpr uint8_t MSG_TIMESYNC_RESP = 0x05;
 
 static constexpr double DEG_TO_RAD    = M_PI / 180.0;
@@ -225,6 +226,10 @@ hardware_interface::CallbackReturn Picar2Hardware::on_configure(
   imu_node_ = rclcpp::Node::make_shared("picar2_imu");
   imu_pub_  = imu_node_->create_publisher<sensor_msgs::msg::Imu>("/imu/data_raw", 10);
   mag_pub_  = imu_node_->create_publisher<sensor_msgs::msg::MagneticField>("/imu/mag", 10);
+  // Latched-ish: a battery reading is state, not a stream, and anything
+  // asking for it wants the last value rather than a five-second wait.
+  batt_pub_ = imu_node_->create_publisher<sensor_msgs::msg::BatteryState>(
+    "/battery", rclcpp::QoS(1).transient_local());
 
   return hardware_interface::CallbackReturn::SUCCESS;
 }
@@ -257,6 +262,11 @@ hardware_interface::CallbackReturn Picar2Hardware::on_activate(
   uint8_t imu_rate[3] = {STREAM_IMU,
     static_cast<uint8_t>(hz & 0xFF), static_cast<uint8_t>(hz >> 8)};
   uart_write(rate_frame, encode_frame(MSG_SET_RATE, imu_rate, 3, rate_frame));
+  // 1 Hz. A pack discharges over tens of minutes, and every frame here is
+  // bandwidth taken from JOINT at 100 Hz on a link that has already been
+  // shown to overrun.
+  uint8_t batt_rate[3] = {STREAM_BATTERY, 1, 0};
+  uart_write(rate_frame, encode_frame(MSG_SET_RATE, batt_rate, 3, rate_frame));
 
   RCLCPP_INFO(get_logger(), "Activated — JOINT at 100 Hz, IMU at %d Hz", imu_rate_hz_);
   return hardware_interface::CallbackReturn::SUCCESS;
@@ -272,6 +282,8 @@ hardware_interface::CallbackReturn Picar2Hardware::on_deactivate(
   uint8_t stop_imu[3]   = {STREAM_IMU,   0, 0};
   uart_write(stop_frame, encode_frame(MSG_SET_RATE, stop_joint, 3, stop_frame));
   uart_write(stop_frame, encode_frame(MSG_SET_RATE, stop_imu,   3, stop_frame));
+  uint8_t stop_batt[3]  = {STREAM_BATTERY, 0, 0};
+  uart_write(stop_frame, encode_frame(MSG_SET_RATE, stop_batt,  3, stop_frame));
 
   // Zero velocity, neutral steer + pan/tilt (0 = center for all)
   uint8_t vel_payload[6] = {0, 0, 0, 0, 0, 0};
@@ -420,6 +432,41 @@ void Picar2Hardware::dispatch_joint_frame(const uint8_t * p, uint8_t len)
   }
 }
 
+void Picar2Hardware::dispatch_battery_frame(const uint8_t * p, uint8_t len)
+{
+  // voltage_mv:u16, charge_pct:u8, _pad:u8  (protocol.md, STM32->Pi 0x03)
+  if (len < 3) {
+    return;
+  }
+  const uint16_t mv = static_cast<uint16_t>(p[0] | (p[1] << 8));
+  const uint8_t pct = p[2];
+
+  sensor_msgs::msg::BatteryState msg;
+  msg.header.stamp = imu_node_->now();
+  msg.voltage = static_cast<float>(mv) / 1000.0f;
+  // The firmware's percentage, not one derived here: VBAT_MIN_MV/VBAT_MAX_MV
+  // live in battery.c and duplicating them is how the two drift apart.
+  msg.percentage = static_cast<float>(pct) / 100.0f;
+  msg.present = mv > 0;
+  msg.power_supply_status = sensor_msgs::msg::BatteryState::POWER_SUPPLY_STATUS_UNKNOWN;
+  msg.power_supply_health = sensor_msgs::msg::BatteryState::POWER_SUPPLY_HEALTH_UNKNOWN;
+  msg.power_supply_technology =
+    sensor_msgs::msg::BatteryState::POWER_SUPPLY_TECHNOLOGY_LION;
+  // Unmeasured fields must be NaN, not 0: a consumer cannot tell "no current
+  // sensor" from "drawing nothing" otherwise.
+  msg.current = std::numeric_limits<float>::quiet_NaN();
+  msg.charge = std::numeric_limits<float>::quiet_NaN();
+  msg.capacity = std::numeric_limits<float>::quiet_NaN();
+  msg.design_capacity = std::numeric_limits<float>::quiet_NaN();
+  batt_pub_->publish(msg);
+
+  if (mv > 0 && mv < 9600) {           // 3S nominal 11.1 V; 3.2 V/cell floor
+    RCLCPP_WARN_THROTTLE(
+      rclcpp::get_logger("Picar2Hardware"), *imu_node_->get_clock(), 60000,
+      "battery low: %.2f V (%u%%)", mv / 1000.0, pct);
+  }
+}
+
 void Picar2Hardware::dispatch_timesync_resp()
 {
   int64_t t4 = now_us();
@@ -515,6 +562,8 @@ void Picar2Hardware::process_byte(uint8_t b)
           dispatch_joint_frame(rx_buf_, rx_len_);
         } else if (rx_type_ == STREAM_IMU && rx_len_ >= 12) {
           dispatch_imu_frame(rx_buf_, rx_len_);
+        } else if (rx_type_ == STREAM_BATTERY && rx_len_ >= 3) {
+          dispatch_battery_frame(rx_buf_, rx_len_);
         } else if (rx_type_ == MSG_TIMESYNC_RESP && rx_len_ >= 8) {
           dispatch_timesync_resp();
         } else {

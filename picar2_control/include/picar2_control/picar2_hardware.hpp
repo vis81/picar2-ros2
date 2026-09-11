@@ -1,6 +1,7 @@
 #pragma once
 
 #include <atomic>
+#include <limits>
 #include <cstdint>
 #include <mutex>
 #include <string>
@@ -12,6 +13,7 @@
 #include "rclcpp/rclcpp.hpp"
 #include "rclcpp_lifecycle/state.hpp"
 #include "sensor_msgs/msg/imu.hpp"
+#include "sensor_msgs/msg/battery_state.hpp"
 #include "sensor_msgs/msg/magnetic_field.hpp"
 
 namespace picar2_control
@@ -48,6 +50,7 @@ private:
   void process_byte(uint8_t b);
   void dispatch_joint_frame(const uint8_t * payload, uint8_t len);
   void dispatch_imu_frame(const uint8_t * payload, uint8_t len);
+  void dispatch_battery_frame(const uint8_t * payload, uint8_t len);
   void dispatch_timesync_resp();
 
   std::string port_;
@@ -126,6 +129,7 @@ private:
   rclcpp::Node::SharedPtr imu_node_;
   rclcpp::Publisher<sensor_msgs::msg::Imu>::SharedPtr          imu_pub_;
   rclcpp::Publisher<sensor_msgs::msg::MagneticField>::SharedPtr mag_pub_;
+  rclcpp::Publisher<sensor_msgs::msg::BatteryState>::SharedPtr batt_pub_;
 };
 
 }  // namespace picar2_control
