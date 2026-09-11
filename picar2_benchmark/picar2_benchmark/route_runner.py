@@ -256,6 +256,15 @@ class RouteRunner:
         if self.loop and len(self.arrivals) > n:
             laps = [self.arrivals[i + n] - self.arrivals[i]
                     for i in range(len(self.arrivals) - n)]
+        # Legs, not just laps: a lap time hides which corner cost the seconds,
+        # and the per-leg splits are what a hardware run is compared against.
+        # arrivals[k] is the pass of waypoint k % n, so the gap to arrivals[k+1]
+        # is the leg out of that waypoint.
+        legs: dict[str, list[float]] = {}
+        for k in range(len(self.arrivals) - 1):
+            j = k % n
+            key = f'wp{j}->wp{(j + 1) % n}'
+            legs.setdefault(key, []).append(self.arrivals[k + 1] - self.arrivals[k])
         per_wp: dict[str, float] = {}
         for i in range(n):
             v = [a for j, a in self.approaches if j == i]
@@ -280,13 +289,15 @@ class RouteRunner:
             'lap_time_s': round(sum(laps) / len(laps), 2) if laps else None,
             'lap_time_min_s': round(min(laps), 2) if laps else None,
             'lap_time_max_s': round(max(laps), 2) if laps else None,
+            'leg_time_s': {k: round(sum(v) / len(v), 2) for k, v in legs.items()},
+            'leg_times_all_s': {k: [round(x, 2) for x in v] for k, v in legs.items()},
             'nav_statuses': self.statuses,
         }
 
 
 def run_trial(scenario: str, out_dir: Path, gen_dir: Path, mode: str = 'flow',
               keep_up: bool = False, sensor_noise: float = 1.0,
-              bag: bool = True) -> dict:
+              bag: bool = True, overlay: str = '') -> dict:
     sc = spec.load(scenario)
     if not sc.route:
         raise SystemExit(f'{sc.name} is not a route scenario (no `route:` block)')
@@ -301,7 +312,15 @@ def run_trial(scenario: str, out_dir: Path, gen_dir: Path, mode: str = 'flow',
 
     logs = out_dir / 'logs' / f'{sc.name}_{mode}_{int(time.time())}'
     result: dict = {'scenario': sc.name, 'route_mode': mode,
-                    'localisation': 'ground_truth', 'sensor_noise': sensor_noise}
+                    'localisation': 'ground_truth', 'sensor_noise': sensor_noise,
+                    'config': Path(overlay).stem if overlay else 'baseline'}
+    # A missing overlay is not an error to launch_ros: it warns "Parameter file
+    # path is not a file" and runs the baseline, so the trial would record a
+    # config it never used. Same guard as runner.py, for the same reason.
+    if overlay and not Path(overlay).is_file():
+        return {**result, 'outcome': 'RUNNER_ERROR',
+                'detail': f'overlay file not found: {overlay} - if you just '
+                          f'added it, rebuild the package so it installs'}
     busy = wait_for_quiet_domain()
     if busy:
         return {**result, 'outcome': 'SIM_DEGRADED',
@@ -332,7 +351,9 @@ def run_trial(scenario: str, out_dir: Path, gen_dir: Path, mode: str = 'flow',
             logs / 'loc.log')
         stack.launch([
             'ros2', 'launch', 'picar2_bringup', 'nav2.launch.py',
-            'use_sim_time:=true'], logs / 'nav2.log')
+            'use_sim_time:=true']
+            + ([f'params_overlay:={overlay}'] if overlay else []),
+            logs / 'nav2.log')
         if bag:
             stack.launch(['ros2', 'bag', 'record', '-o', str(logs / 'bag'),
                           '--include-hidden-topics', '--max-cache-size', '10485760',
@@ -394,16 +415,20 @@ def main(argv=None) -> int:
     ap.add_argument('--sensor-noise', type=float, default=1.0)
     ap.add_argument('--no-bag', dest='bag', action='store_false')
     ap.add_argument('--keep-up', action='store_true')
+    ap.add_argument('--overlay', default='',
+                    help='nav2 params overlay layered over nav2.yaml, e.g. the '
+                         'installed configs/speed_060.yaml to drive the route at '
+                         'the speed the robot was measured at')
     a = ap.parse_args(argv)
     out = Path(a.out)
     out.mkdir(parents=True, exist_ok=True)
     res = run_trial(a.scenario, out, Path('/tmp/picar2_bench'), a.route_mode,
-                    a.keep_up, a.sensor_noise, a.bag)
+                    a.keep_up, a.sensor_noise, a.bag, a.overlay)
     exp = spec.check_expectations(spec.load(a.scenario), res)
     if exp:
         res['expectations'] = exp
-    name = (f"{res['scenario']}_route_{a.route_mode}_n{a.sensor_noise}_"
-            f"{int(time.time())}.json")
+    name = (f"{res['scenario']}_route_{a.route_mode}_{res['config']}_"
+            f"n{a.sensor_noise}_{int(time.time())}.json")
     (out / name).write_text(json.dumps(res, indent=2))
     print(json.dumps(res, indent=2))
     # A route that completed but missed waypoints is a failure, however

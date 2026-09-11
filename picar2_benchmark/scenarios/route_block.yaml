@@ -1,0 +1,38 @@
+name: route_block
+description: >
+  One big box in the middle, four waypoints in the corridor around it, three
+  laps. The stand-in for f1_route: same route length, same lap count, same
+  clockwise sense, but geometry anyone can hold in their head.
+
+  f1_route rebuilds the real office from its saved map, which makes it faithful
+  and makes every number it produces impossible to attribute — 176 boxes of
+  furniture, doorways and mapping litter, so a slow lap could be the controller,
+  the planner, or one chair leg. Here there is exactly one obstacle. A slow lap
+  is the robot.
+
+  The ring is sized to f1_route's own perimeter, 16.76 m per lap, so lap and leg
+  times are directly comparable against both the sim run there and the numbers
+  measured on the floor. The legs are not equal (3.26 m on the short sides,
+  5.12 m on the long) for the same reason f1_route's are not: equal legs hide
+  whether a leg time tracks distance or tracks the corner at the end of it.
+
+  The corridor is 1.62 m wide with the waypoints down its centre line, so there
+  is 0.81 m of room on each side — comparable to the office, and wide enough
+  that a scrape means the robot cut the corner rather than that it could not
+  fit. Every waypoint is a 90 degree corner, which is the interesting case for
+  flow mode: a controller that never stops has to carry speed through it.
+world: {size: [6.8, 4.9], rtf: 0.5, max_step: 0.001}
+obstacles:
+  - {x: 0.0, y: 0.0, sx: 3.5, sy: 1.6, sz: 1.0}
+start: {x: 1.76, y: 1.63, yaw: 0.0}
+goal:  {x: 0.0, y: 0.0, yaw: 0.0}     # unused on a route; kept for the loader
+route:
+  loop: true
+  laps: 3
+  timeout_s: 600
+  capture_radius_m: 0.45
+  waypoints:
+    - {x:  2.56, y:  1.63, yaw: -1.5708}
+    - {x:  2.56, y: -1.63, yaw:  3.1416}
+    - {x: -2.56, y: -1.63, yaw:  1.5708}
+    - {x: -2.56, y:  1.63, yaw:  0.0}
