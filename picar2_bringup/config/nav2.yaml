@@ -43,7 +43,16 @@ planner_server:
       reverse_penalty: 2.0
       change_penalty: 0.0
       non_straight_penalty: 1.2
-      cost_penalty: 2.0
+      # 6.0, up from the 2.0 default. The controller tracks the plan to
+      # within 5 cm, so when the robot runs close to walls it is because the
+      # plan does — Smac takes the shortest path and at 2.0 barely minds the
+      # inflated cells beside it. A higher penalty pulls the plan toward the
+      # middle of a corridor without making inflated cells impassable, which
+      # is what raising inflation_radius would do to the 0.33 m pinch.
+      # 4.0 was enough at 0.65 m/s; at 0.70 it still entered the pinch on the
+      # wall side and lost 7 s a lap there. 6.0 arrives centred: ten laps at
+      # 0.70, 28.9 s mean, stdev 1.24, zero reversals.
+      cost_penalty: 6.0
       retrospective_penalty: 0.015
       cache_obstacle_heuristic: true
       smooth_path: true
@@ -97,7 +106,21 @@ controller_server:
       # the running node with `ros2 param get`.
       max_allowed_time_to_collision_up_to_carrot: 0.5
       use_regulated_linear_velocity_scaling: true
-      use_cost_regulated_linear_velocity_scaling: false
+      # Slow down near obstacles, full speed in the open. Sized from the F1
+      # route's measured clearance profile: median 57 cm, and only 6.7% of a
+      # lap within 0.30 m of a wall — so this touches the tight spots and
+      # nothing else, and desired_linear_vel becomes a ceiling for open space
+      # rather than a speed to hold everywhere.
+      #
+      # inflation_cost_scaling_factor MUST equal the local costmap's
+      # cost_scaling_factor (5.0): RPP inverts the inflation exponential to
+      # recover distance from cost, and the RPP default of 3.0 gets it wrong
+      # silently. cost_scaling_dist must sit under inflation_radius (0.33) —
+      # beyond that the cost is zero and there is nothing to scale on.
+      use_cost_regulated_linear_velocity_scaling: true
+      cost_scaling_dist: 0.30
+      cost_scaling_gain: 1.0
+      inflation_cost_scaling_factor: 5.0
       regulated_linear_scaling_min_radius: 0.9
       regulated_linear_scaling_min_speed: 0.15
       use_rotate_to_heading: false          # Ackermann cannot spin in place
@@ -213,18 +236,14 @@ local_costmap:
         # is smaller than the circumscribed radius" — so 0.25 is not available
         # to this robot however tight the space.
         #
-        # 0.32, one step above that floor. The F1 route's tightest point has
-        # 0.33 m of clearance, so at 0.35 no cost-0 corridor exists through it
-        # at all and the planner intermittently reported "no valid path found"
-        # — measured, with the robot looping back to wp0 four times over 138 s
-        # rather than entering the gap. This buys 1 cm of margin, which is all
-        # the geometry allows; the real fix for a gap that tight is a route
-        # that does not use it.
-        #
-        # 0.33, not 0.32: Nav2 reports the circumscribed radius as 0.3273, not
-        # the 0.315 computed above, and below it Smac drops its potential-field
-        # shortcut and checks the full footprint at every node — it says so,
-        # "This will substantially impact run-time performance", once per plan.
+        # Tried 0.33 for the F1 route's 0.33 m pinch, where 0.35 leaves no
+        # cost-0 corridor and the planner intermittently reported "no valid
+        # path found". It got through the gap — and ran close to walls
+        # everywhere else. Back to 0.35 once cost-regulated velocity scaling
+        # went on in the controller: with the robot slowing near obstacles the
+        # wider margin is affordable again. Do not go below 0.33 in any case:
+        # Nav2 reports the circumscribed radius as 0.3273, and under it Smac
+        # loses its potential-field shortcut and warns about it every plan.
         inflation_radius: 0.33
       always_send_full_costmap: true
 
@@ -288,8 +307,6 @@ global_costmap:
         # Lowered again to match the local costmap after waypoint routes
         # kept stalling in tight spaces — re-check dead_end_reverse if
         # reverse manoeuvres start failing again.
-        # 0.33: see the local costmap's note. Not lower — Nav2 reports the
-        # circumscribed radius as 0.3273 and below it Smac loses its
-        # potential-field shortcut.
+        # 0.35: see the local costmap's note.
         inflation_radius: 0.33
       always_send_full_costmap: true
