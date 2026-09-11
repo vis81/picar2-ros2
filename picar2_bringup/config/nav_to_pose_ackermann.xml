@@ -20,37 +20,43 @@
         <RateController hz="1.0">
           <RecoveryNode number_of_retries="1" name="ComputePathToPose">
             <ComputePathToPose goal="{goal}" path="{path}" planner_id="{selected_planner}" error_code_id="{compute_path_error_code}"/>
-            <Sequence>
-              <WouldAPlannerRecoveryHelp error_code="{compute_path_error_code}"/>
               <ClearEntireCostmap name="ClearGlobalCostmap-Context" service_name="global_costmap/clear_entirely_global_costmap"/>
-            </Sequence>
           </RecoveryNode>
         </RateController>
         <RecoveryNode number_of_retries="1" name="FollowPath">
           <FollowPath path="{path}" controller_id="{selected_controller}" error_code_id="{follow_path_error_code}"/>
-          <Sequence>
-            <WouldAControllerRecoveryHelp error_code="{follow_path_error_code}"/>
             <ClearEntireCostmap name="ClearLocalCostmap-Context" service_name="local_costmap/clear_entirely_local_costmap"/>
-          </Sequence>
         </RecoveryNode>
       </PipelineSequence>
-      <Sequence>
-        <Fallback>
-          <WouldAControllerRecoveryHelp error_code="{follow_path_error_code}"/>
-          <WouldAPlannerRecoveryHelp error_code="{compute_path_error_code}"/>
-        </Fallback>
+      <!-- Recovery is NOT gated on WouldA*RecoveryHelp.
+
+           Upstream gates every route into this subtree on those two
+           conditions, and their list is {UNKNOWN, NO_VALID_PATH, TIMEOUT}.
+           START_OCCUPIED (305) is not in it, so a robot whose own footprint
+           is in a lethal cell gets no recovery at all — the tree fails in
+           about 40 ms. Measured on the robot: the planner refused with
+           "Start occupied" seven times at one spot, and the car sat against
+           a wall it could have reversed away from in one BackUp.
+
+           That exclusion is exactly backwards here. Clearing the costmap is
+           the fix for a spurious mark, and BackUp is the fix for a real one.
+           The cost of not gating is a few seconds spent recovering from a
+           failure recovery cannot help (a bad planner id, say), bounded by
+           the retry count above. -->
         <ReactiveFallback name="RecoveryFallback">
           <GoalUpdated/>
           <RoundRobin name="RecoveryActions">
-            <BackUp backup_dist="0.30" backup_speed="0.15" error_code_id="{backup_code_id}"/>
-            <Sequence name="ClearingActions">
+            <!-- Clear, then reverse, in one attempt: BackUp will not move while
+                 the footprint is inside an inflated region, which is the state it
+                 exists to escape. -->
+            <Sequence name="ClearThenBackUp">
               <ClearEntireCostmap name="ClearLocalCostmap-Subtree" service_name="local_costmap/clear_entirely_local_costmap"/>
               <ClearEntireCostmap name="ClearGlobalCostmap-Subtree" service_name="global_costmap/clear_entirely_global_costmap"/>
+              <BackUp backup_dist="0.30" backup_speed="0.15" error_code_id="{backup_code_id}"/>
             </Sequence>
             <Wait wait_duration="5.0"/>
           </RoundRobin>
         </ReactiveFallback>
-      </Sequence>
     </RecoveryNode>
   </BehaviorTree>
 </root>
