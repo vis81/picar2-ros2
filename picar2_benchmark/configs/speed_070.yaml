@@ -1,0 +1,25 @@
+# 0.70 m/s. Faster than 0.60 by almost exactly its speed ratio, and the angular
+# cap does not bind — measured, having predicted the opposite.
+#
+# The prediction was that cmd_vel_relay's 1.2 rad/s clamp would start to hurt
+# here. It is a constant derived for 0.4 m/s (controllers.yaml: "hardware max at
+# 0.4 m/s: v/r = 0.4/0.34 ~= 1.18"), so the tightest turn it permits is v / 1.2,
+# which grows with speed: 0.42 m at 0.50 m/s, 0.50 m at 0.60, 0.58 m at 0.70 —
+# the last of those above the planner's minimum_turning_radius of 0.5, so the
+# planner could ask for a turn the drivetrain would refuse.
+#
+# Sampling /cmd_vel through a three-lap run at 0.70 on f1_route says it never
+# does: angular sits at 0.22 rad/s median and 0.78 at p95, and only 0.9% of
+# commands exceed 1.2 — all of them at ~0.14 m/s, so tight manoeuvres at a
+# standstill rather than corners taken at speed. The geometry was right about
+# what the robot *could* be asked for; the route never asks. On a course with
+# genuinely tight corners the cap would matter, and this is the way to check:
+# count |angular| > cap in /cmd_vel rather than infer it from lap times.
+#
+# Measured on f1_route, flow, three laps: 28.3 s/lap against 32.0 at 0.60, no
+# missed waypoints, min clearance 0.11 m. The cost is accuracy, not safety —
+# mean approach 0.043 -> 0.060 m and lap spread 1.4 -> 3.1 s.
+controller_server:
+  ros__parameters:
+    FollowPath:
+      desired_linear_vel: 0.70
