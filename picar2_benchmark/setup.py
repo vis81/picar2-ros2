@@ -31,6 +31,7 @@ setup(
             'bench-run = picar2_benchmark.runner:main',
             'bench-explore = picar2_benchmark.explore_runner:main',
             'bench-route = picar2_benchmark.route_runner:main',
+            'bench-from-map = picar2_benchmark.map_to_scenario:main',
             'bench-report = picar2_benchmark.report:main',
             'bench-plan-sweep = picar2_benchmark.plan_sweep:main',
         ],
