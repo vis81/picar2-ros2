@@ -197,6 +197,12 @@ def _wait_topic(topic: str, timeout: float) -> bool:
 BAG_TOPICS = [
     '/behavior_tree_log', '/plan', '/received_global_plan', '/local_plan',
     '/cmd_vel', '/gt/odom', '/odom', '/lidar_node/scan', '/joint_states',
+    # The ToF is the only sensor that sees a low obstacle, and the only one
+    # whose rate is not obvious: the driver publishes on a 10 Hz timer but
+    # blocks on a UART frame inside it, so the real rate is whatever the
+    # sensor streams. Recording it makes that measurable after the fact
+    # instead of needing a live `topic hz` on a robot that is usually away.
+    '/sen0628/pointcloud',
     '/tf', '/tf_static', '/rosout',
     '/navigate_to_pose/_action/status', '/follow_path/_action/status',
     '/compute_path_to_pose/_action/status',
