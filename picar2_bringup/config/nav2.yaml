@@ -120,6 +120,11 @@ controller_server:
       use_cost_regulated_linear_velocity_scaling: true
       cost_scaling_dist: 0.30
       cost_scaling_gain: 1.0
+      # picar2 fork only: regulate on the worst cost along the path this far
+      # ahead (0 = robot cell only, upstream behaviour). Tried on f1_route at
+      # 0.70: 0.7 m brakes smoothly into the pinch but taxes every corner
+      # (-4 s/lap); 0.3 m changes nothing at the pinch. Left off.
+      cost_lookahead_dist: 0.0
       inflation_cost_scaling_factor: 5.0
       regulated_linear_scaling_min_radius: 0.9
       regulated_linear_scaling_min_speed: 0.15
