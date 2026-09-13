@@ -19,8 +19,13 @@ ekf_filter_node:
     odom0: /ackermann_steering_controller/odometry
     # x  y      z      roll   pitch  yaw    vx     vy     vz
     # vroll  vpitch  vyaw   ax     ay     az
-    odom0_config: [true,  true,  false,
-                   false, false, true,
+    # vx only. x/y/yaw from the Ackermann kinematics carry the steering
+    # calibration error: against a scan-matched truth the EKF yaw
+    # under-rotated every corner by 11% (+8 deg per 3 s turn, +200 deg over
+    # a 96 s run) while the integrated gyro was within 1-2 deg. Integrating
+    # vx with the gyro's yaw rate is the better odometry for this car.
+    odom0_config: [false, false, false,
+                   false, false, false,
                    true,  false, false,
                    false, false, false,
                    false, false, false]
