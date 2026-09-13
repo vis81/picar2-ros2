@@ -52,7 +52,7 @@
             <Sequence name="ClearThenBackUp">
               <ClearEntireCostmap name="ClearLocalCostmap-Subtree" service_name="local_costmap/clear_entirely_local_costmap"/>
               <ClearEntireCostmap name="ClearGlobalCostmap-Subtree" service_name="global_costmap/clear_entirely_global_costmap"/>
-              <BackUp backup_dist="0.30" backup_speed="0.15" error_code_id="{backup_code_id}"/>
+              <BackUp backup_dist="0.30" backup_speed="0.25" error_code_id="{backup_code_id}"/>
             </Sequence>
             <Wait wait_duration="5.0"/>
           </RoundRobin>
