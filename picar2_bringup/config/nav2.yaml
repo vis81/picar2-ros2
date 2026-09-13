@@ -104,7 +104,11 @@ controller_server:
       # default applied, projecting the footprint ~0.4 m ahead at 0.4 m/s —
       # almost always in contact among chair and table legs. Verified against
       # the running node with `ros2 param get`.
-      max_allowed_time_to_collision_up_to_carrot: 0.5
+      # 1.0 s (was 0.5): at 0.70 m/s the 0.5 s check projected only 0.35 m,
+      # less than costmap latency plus stopping distance - the robot drove
+      # into a person the lidar had tracked from 2.5 m. 1.5 s brushes the
+      # pinch walls and aborts the route (sim); 1.0 s is clean there.
+      max_allowed_time_to_collision_up_to_carrot: 1.0
       use_regulated_linear_velocity_scaling: true
       # Slow down near obstacles, full speed in the open. Sized from the F1
       # route's measured clearance profile: median 57 cm, and only 6.7% of a
