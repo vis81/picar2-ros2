@@ -34,6 +34,7 @@ setup(
             'bench-from-map = picar2_benchmark.map_to_scenario:main',
             'bench-report = picar2_benchmark.report:main',
             'bench-plan-sweep = picar2_benchmark.plan_sweep:main',
+            'bench-odom = picar2_benchmark.odom_check:main',
         ],
     },
 )
