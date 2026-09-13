@@ -1,0 +1,7 @@
+# picar2 RPP fork: path_curvature_lookahead_dist 0.8 at 0.70 m/s, against
+# speed_070 - the sim is clean at this speed, so the patch's own effect shows.
+controller_server:
+  ros__parameters:
+    FollowPath:
+      desired_linear_vel: 0.70
+      path_curvature_lookahead_dist: 0.8

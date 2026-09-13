@@ -1,0 +1,15 @@
+# picar2 RPP fork, Dynamic Window Pure Pursuit (ported from Nav2 main #5783):
+# acceleration-limited (v, w) inside the controller. accel 0.8 m/s2 is the
+# "starts too fast" fix; decel is left high so RPP's own braking is not
+# delayed (a decel-limited smoother after RPP broke its lookahead before).
+controller_server:
+  ros__parameters:
+    FollowPath:
+      desired_linear_vel: 1.0
+      use_dynamic_window: true
+      max_linear_accel: 0.8
+      max_linear_decel: -2.0
+      max_angular_vel: 1.2
+      min_angular_vel: -1.2
+      max_angular_accel: 3.2
+      max_angular_decel: -3.2
