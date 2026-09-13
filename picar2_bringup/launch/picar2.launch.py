@@ -216,11 +216,29 @@ def generate_launch_description():
                 plugin='ldlidar::LdLidarComponent',
                 name='lidar_node',
                 parameters=[lidar_ld19_config],
+                # The raw scan goes to scan_deskew, which publishes
+                # /lidar_node/scan: the driver stamps a whole revolution at
+                # its end, and everything downstream takes it as instant.
+                remappings=[('/lidar_node/scan', '/lidar_node/scan_raw')],
                 extra_arguments=[{'use_intra_process_comms': True}],
             ),
         ],
         output='screen',
         condition=lidar_is('ld19'),
+    )
+
+    lidar_ld19_deskew = Node(
+        package='picar2_bringup',
+        executable='scan_deskew.py',
+        name='scan_deskew',
+        output='screen',
+        condition=lidar_is('ld19'),
+        parameters=[{
+            'input': '/lidar_node/scan_raw',
+            'output': '/lidar_node/scan',
+            'fixed_frame': 'odom',
+            'reverse_beam_time': True,      # driver rot_verse CCW
+        }],
     )
 
     lidar_ld19_lc_mgr = Node(
@@ -396,6 +414,7 @@ def generate_launch_description():
         lidar_lds02rr,
         lidar_ld19_container,
         lidar_ld19_lc_mgr,
+        lidar_ld19_deskew,
         sen0628_node,
         sen0628_configure,
         sen0628_activate,
