@@ -22,17 +22,23 @@ amcl:
     # we run tighter than the Nav2 defaults (which assume 0.2 each) —
     # smaller alpha → particles cluster more tightly, better steady-state
     # precision. Bump back to 0.2 if you swap to a noisier odom source.
-    alpha1: 0.1     # rot from rot
-    alpha2: 0.1     # rot from trans
-    alpha3: 0.1     # trans from trans
-    alpha4: 0.1     # trans from rot
+    # 0.05 (was 0.1): the cloud sat ~20 cm wide at every speed on both
+    # maps (amcl_pose sigma, bags of 2026-09-13), and a 0.7 m corridor
+    # does not forgive 20 cm. Odometry tracks the plan to 4 cm, so the
+    # motion model can afford to trust it more.
+    alpha1: 0.05    # rot from rot
+    alpha2: 0.05    # rot from trans
+    alpha3: 0.05    # trans from trans
+    alpha4: 0.05    # trans from rot
     alpha5: 0.0     # strafing — Ackermann can't strafe; zero kills useless spread
 
     # Particle filter sizing. Defaults (500/2000) are conservative; Pi 4
     # comfortably handles 3000 and the extra hypothesis density helps in
     # rooms with locally-ambiguous geometry. Bump max to 5000 in long
     # featureless corridors where AMCL keeps losing lock.
-    min_particles: 800
+    # 1500 (was 800): yaw error sat at 4 deg median against an offline
+    # scan match; angular precision is particle density.
+    min_particles: 1500
     max_particles: 3000
 
     # Sensor model — likelihood_field is the modern default.
@@ -48,9 +54,16 @@ amcl:
     laser_min_range: -1.0     # -1 = use sensor's own min
     max_beams: 180
     laser_likelihood_max_dist: 2.0
-    sigma_hit: 0.1
-    z_hit: 0.7
-    z_rand: 0.25
+    # 0.05 (was 0.1): offline likelihood contrast on the 2026-09-13 bags
+    # is 4x sharper at one map cell; z_rand keeps the weights off zero
+    # when a scan is skewed. Watch amcl_pose for jumps; 0.07 if it is
+    # too tight.
+    sigma_hit: 0.05
+    # 0.95/0.05 (were 0.7/0.25): a quarter of every beam's weight as
+    # "random" flattens the likelihood, so particles well off the truth
+    # survive resampling - measured as the ~20 cm cloud above.
+    z_hit: 0.95
+    z_rand: 0.05
     z_max: 0.05
     z_short: 0.05
     lambda_short: 0.1
@@ -74,7 +87,11 @@ amcl:
     # restart re-uses the last known pose as a prior. transform_tolerance
     # matches the rest of the nav2 stack (0.3 s).
     tf_broadcast: true
-    transform_tolerance: 0.3
+    # 0.5 (was 0.3): the map->odom transform is stamped this far ahead;
+    # on a loaded Pi a late scan callback let it expire and RPP aborted the
+    # path ("Unable to transform robot pose into global plan's frame",
+    # 33 times over 24 bags on 2026-09-13). A validity window, not a delay.
+    transform_tolerance: 0.5
     save_pose_rate: 0.5
 
     # Convergence / KLD sampling — Nav2 defaults are fine here.
