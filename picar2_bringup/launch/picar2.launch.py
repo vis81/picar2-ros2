@@ -279,13 +279,14 @@ def generate_launch_description():
         executable='sensor_watchdog.py',
         name='sensor_watchdog',
         output='screen',
+        # A list of substitutions is one concatenated value to launch, so
+        # each array is a single expression that evaluates to a list.
         parameters=[{
             'names': ['ld19', 'sen0628'],
-            'devices': ['/dev/ldlidar', LaunchConfiguration('sen0628_port')],
-            'nodes': [
-                PythonExpression(["'lidar_node' if '", LaunchConfiguration('lidar'), "' == 'ld19' else ''"]),
-                PythonExpression(["'tof_imager' if '", LaunchConfiguration('use_sen0628'), "' == 'true' else ''"]),
-            ],
+            'devices': PythonExpression(["['/dev/ldlidar', '", LaunchConfiguration('sen0628_port'), "']"]),
+            'nodes': PythonExpression([
+                "['lidar_node' if '", LaunchConfiguration('lidar'), "' == 'ld19' else '', ",
+                "'tof_imager' if '", LaunchConfiguration('use_sen0628'), "' == 'true' else '']"]),
         }],
     )
 
