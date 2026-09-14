@@ -20,12 +20,19 @@
       <PipelineSequence name="NavigateWithReplanning">
         <ControllerSelector selected_controller="{selected_controller}" default_controller="FollowPath" topic_name="controller_selector"/>
         <PlannerSelector selected_planner="{selected_planner}" default_planner="GridBased" topic_name="planner_selector"/>
+        <!-- Every tick, not once per planner period: a passed waypoint leaves
+             the list within ~50 ms of the 0.4 m line. -->
+        <RemovePassedGoals input_goals="{goals}" output_goals="{goals}" radius="0.4"/>
+        <!-- Fires only when {goals} changed: the plan carrying the passed
+             waypoint's heading shunt is replaced at once, not at the next 1 Hz
+             tick - a metre later at 1.0 m/s, by which time the robot was in the
+             shunt and stopping at wp0 on every lap. -->
+        <GoalUpdatedController>
+          <ComputePathThroughPoses goals="{goals}" path="{path}" planner_id="{selected_planner}" error_code_id="{compute_path_error_code}"/>
+        </GoalUpdatedController>
         <RateController hz="0.333">
           <RecoveryNode number_of_retries="1" name="ComputePathThroughPoses">
-            <ReactiveSequence>
-              <RemovePassedGoals input_goals="{goals}" output_goals="{goals}" radius="0.4"/>
-              <ComputePathThroughPoses goals="{goals}" path="{path}" planner_id="{selected_planner}" error_code_id="{compute_path_error_code}"/>
-            </ReactiveSequence>
+            <ComputePathThroughPoses goals="{goals}" path="{path}" planner_id="{selected_planner}" error_code_id="{compute_path_error_code}"/>
               <ClearEntireCostmap name="ClearGlobalCostmap-Context" service_name="global_costmap/clear_entirely_global_costmap"/>
           </RecoveryNode>
         </RateController>
