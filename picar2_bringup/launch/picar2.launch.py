@@ -270,23 +270,34 @@ def generate_launch_description():
         ],
         remappings=[('pointcloud', '/sen0628/pointcloud')],
     )
-    # Watches /dev/ldlidar and the ToF port once a second and drives the two
-    # drivers' lifecycle from that: configure+activate when a device is
-    # there, deactivate+cleanup when it goes, and again when it comes back.
-    # An empty node name disables an entry.
+    # The ToF driver handles its own device loss and return (closes the
+    # port on a read error, reopens it when the path is back), so it only
+    # needs the one-time configure+activate here; it configures fine with
+    # the sensor unplugged.
+    sen0628_configure = EmitEvent(event=ChangeState(
+        lifecycle_node_matcher=matches_action(sen0628_node),
+        transition_id=Transition.TRANSITION_CONFIGURE))
+    sen0628_activate = RegisterEventHandler(OnStateTransition(
+        target_lifecycle_node=sen0628_node,
+        goal_state='inactive',
+        entities=[EmitEvent(event=ChangeState(
+            lifecycle_node_matcher=matches_action(sen0628_node),
+            transition_id=Transition.TRANSITION_ACTIVATE))]))
+
+    # Watches /dev/ldlidar once a second and drives the LD19's lifecycle from
+    # that: configure+activate when the device is there, deactivate+cleanup
+    # when it goes, and again when it comes back. Until the driver itself
+    # does this (it is upstream code), this is what makes a replug work.
     sensor_watchdog = Node(
         package='picar2_bringup',
         executable='sensor_watchdog.py',
         name='sensor_watchdog',
         output='screen',
-        # A list of substitutions is one concatenated value to launch, so
-        # each array is a single expression that evaluates to a list.
+        condition=lidar_is('ld19'),
         parameters=[{
-            'names': ['ld19', 'sen0628'],
-            'devices': PythonExpression(["['/dev/ldlidar', '", LaunchConfiguration('sen0628_port'), "']"]),
-            'nodes': PythonExpression([
-                "['lidar_node' if '", LaunchConfiguration('lidar'), "' == 'ld19' else '', ",
-                "'tof_imager' if '", LaunchConfiguration('use_sen0628'), "' == 'true' else '']"]),
+            'names': ['ld19'],
+            'devices': ['/dev/ldlidar'],
+            'nodes': ['lidar_node'],
         }],
     )
 
@@ -424,6 +435,8 @@ def generate_launch_description():
         ekf_node,
         lidar_lds02rr,
         lidar_ld19_container,
+        sen0628_configure,
+        sen0628_activate,
         sensor_watchdog,
         lidar_ld19_deskew,
         cpu_monitor,
