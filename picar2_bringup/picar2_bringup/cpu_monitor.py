@@ -57,7 +57,11 @@ def process_label(p):
     for a in cmd[:3]:
         base = os.path.basename(a)
         if base.endswith('.py'):
-            return base[:-3]
+            # The scripts of this workspace: server.py is the web UI.
+            return 'webui' if base == 'server.py' else base[:-3]
+    # "python3 /opt/ros/.../ros2 bag record ..." -> "ros2 bag"
+    if len(cmd) >= 3 and os.path.basename(cmd[1]) == 'ros2':
+        return 'ros2 ' + cmd[2]
     if cmd:
         return os.path.basename(cmd[0])
     try:
