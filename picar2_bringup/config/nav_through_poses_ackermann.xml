@@ -22,13 +22,30 @@
         <PlannerSelector selected_planner="{selected_planner}" default_planner="GridBased" topic_name="planner_selector"/>
         <!-- Every tick, not once per planner period: a passed waypoint leaves
              the list within ~50 ms of the 0.4 m line. -->
+        <!-- The global obstacle layer only forgets a mark when a lidar ray
+             crosses it again; a person who stood at a waypoint and left stays
+             there forever once the robot has driven on, and the planner then
+             searches the whole map for a goal it cannot reach. The static
+             layer is reapplied at once and the next scan re-marks anything
+             real, so a clear every 5 s costs nothing but the stale marks. -->
+        <RateController hz="0.2">
+          <ClearEntireCostmap name="ClearGlobalCostmap-Periodic" service_name="global_costmap/clear_entirely_global_costmap"/>
+        </RateController>
         <RemovePassedGoals input_goals="{goals}" output_goals="{goals}" radius="0.4"/>
         <!-- Fires only when {goals} changed: the plan carrying the passed
              waypoint's heading shunt is replaced at once, not at the next 1 Hz
              tick - a metre later at 1.0 m/s, by which time the robot was in the
              shunt and stopping at wp0 on every lap. -->
         <GoalUpdatedController>
-          <ComputePathThroughPoses goals="{goals}" path="{path}" planner_id="{selected_planner}" error_code_id="{compute_path_error_code}"/>
+          <!-- Same retry-after-clear as the periodic branch below. Without it
+               a failed immediate replan (a person marked on top of the next
+               waypoint and never raytraced away, or the race at a route-window
+               preemption) fell through to the recovery subtree: a 5 s Wait,
+               a second failure, then the clear that fixed it. 10 s per event. -->
+          <RecoveryNode number_of_retries="1" name="ComputePathThroughPoses-OnGoalUpdate">
+            <ComputePathThroughPoses goals="{goals}" path="{path}" planner_id="{selected_planner}" error_code_id="{compute_path_error_code}"/>
+            <ClearEntireCostmap name="ClearGlobalCostmap-OnGoalUpdate" service_name="global_costmap/clear_entirely_global_costmap"/>
+          </RecoveryNode>
         </GoalUpdatedController>
         <RateController hz="0.333">
           <RecoveryNode number_of_retries="1" name="ComputePathThroughPoses">
