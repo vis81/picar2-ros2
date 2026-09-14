@@ -241,6 +241,15 @@ def generate_launch_description():
         }],
     )
 
+    # CPU load on /diagnostics: total, per core, temperature, throttling
+    # and the top processes, once a second. Recorded into every bag.
+    cpu_monitor = Node(
+        package='picar2_bringup',
+        executable='cpu_monitor.py',
+        name='cpu_monitor',
+        output='screen',
+    )
+
     lidar_ld19_lc_mgr = Node(
         package='nav2_lifecycle_manager',
         executable='lifecycle_manager',
@@ -415,6 +424,7 @@ def generate_launch_description():
         lidar_ld19_container,
         lidar_ld19_lc_mgr,
         lidar_ld19_deskew,
+        cpu_monitor,
         sen0628_node,
         sen0628_configure,
         sen0628_activate,
