@@ -7,7 +7,7 @@ from launch.actions import (DeclareLaunchArgument, EmitEvent,
 from launch.conditions import IfCondition
 from launch.events import matches_action
 from launch.launch_description_sources import PythonLaunchDescriptionSource
-from launch.substitutions import Command, EqualsSubstitution, LaunchConfiguration
+from launch.substitutions import PythonExpression, Command, EqualsSubstitution, LaunchConfiguration
 from launch_ros.actions import ComposableNodeContainer, LifecycleNode, Node
 from launch_ros.descriptions import ComposableNode
 from launch_ros.event_handlers import OnStateTransition
@@ -250,17 +250,9 @@ def generate_launch_description():
         output='screen',
     )
 
-    lidar_ld19_lc_mgr = Node(
-        package='nav2_lifecycle_manager',
-        executable='lifecycle_manager',
-        name='lidar_lifecycle_manager',
-        output='screen',
-        condition=lidar_is('ld19'),
-        parameters=[{
-            'autostart':  True,
-            'node_names': ['lidar_node'],
-        }],
-    )
+    # The LD19 and the SEN0628 are brought up - and back up after a USB
+    # unplug/replug - by sensor_watchdog below, not by a lifecycle manager
+    # or launch-time transition events: those do it once, at start.
 
     # ── SEN0628 matrix ToF sensor — front of car (replaces LD07) ────────────
     # Publishes /sen0628/pointcloud in sen0628_link frame.
@@ -278,15 +270,24 @@ def generate_launch_description():
         ],
         remappings=[('pointcloud', '/sen0628/pointcloud')],
     )
-    sen0628_configure = EmitEvent(event=ChangeState(
-        lifecycle_node_matcher=matches_action(sen0628_node),
-        transition_id=Transition.TRANSITION_CONFIGURE))
-    sen0628_activate = RegisterEventHandler(OnStateTransition(
-        target_lifecycle_node=sen0628_node,
-        goal_state='inactive',
-        entities=[EmitEvent(event=ChangeState(
-            lifecycle_node_matcher=matches_action(sen0628_node),
-            transition_id=Transition.TRANSITION_ACTIVATE))]))
+    # Watches /dev/ldlidar and the ToF port once a second and drives the two
+    # drivers' lifecycle from that: configure+activate when a device is
+    # there, deactivate+cleanup when it goes, and again when it comes back.
+    # An empty node name disables an entry.
+    sensor_watchdog = Node(
+        package='picar2_bringup',
+        executable='sensor_watchdog.py',
+        name='sensor_watchdog',
+        output='screen',
+        parameters=[{
+            'names': ['ld19', 'sen0628'],
+            'devices': ['/dev/ldlidar', LaunchConfiguration('sen0628_port')],
+            'nodes': [
+                PythonExpression(["'lidar_node' if '", LaunchConfiguration('lidar'), "' == 'ld19' else ''"]),
+                PythonExpression(["'tof_imager' if '", LaunchConfiguration('use_sen0628'), "' == 'true' else ''"]),
+            ],
+        }],
+    )
 
     # Statistical outlier removal: removes points whose mean distance to their
 
@@ -422,12 +423,10 @@ def generate_launch_description():
         ekf_node,
         lidar_lds02rr,
         lidar_ld19_container,
-        lidar_ld19_lc_mgr,
+        sensor_watchdog,
         lidar_ld19_deskew,
         cpu_monitor,
         sen0628_node,
-        sen0628_configure,
-        sen0628_activate,
         ld07_node,
         foxglove_bridge,
         vizanti_launch,
