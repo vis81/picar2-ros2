@@ -229,7 +229,7 @@ def generate_launch_description():
 
     lidar_ld19_deskew = Node(
         package='picar2_bringup',
-        executable='scan_deskew.py',
+        executable='scan_deskew',            # C++; scan_deskew.py is the same node in Python
         name='scan_deskew',
         output='screen',
         condition=lidar_is('ld19'),
