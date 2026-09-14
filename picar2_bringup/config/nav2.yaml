@@ -3,7 +3,12 @@ bt_navigator:
     global_frame: map
     robot_base_frame: base_footprint
     odom_topic: /odom
-    bt_loop_duration: 10
+    # 50 ms, not the 10 ms default: bt_navigator publishes action feedback
+    # on every tick (a TF lookup and a path-length walk each), and every
+    # client pays for it - the web UI spent 61 % of a core on 100 Hz
+    # feedback while driving. 20 Hz still checks RemovePassedGoals every
+    # 7.5 cm at 1.5 m/s; the planner and controller are far slower anyway.
+    bt_loop_duration: 50
     # 20 ms is nav2's default and it is far too tight here: it is how long a
     # BT action node waits for a server to *acknowledge* a goal, and on a Pi 4
     # running cartographer/AMCL, nav2, ros2_control, the lidar and the ToF, a
