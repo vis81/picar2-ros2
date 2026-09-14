@@ -1,5 +1,6 @@
 bt_navigator:
   ros__parameters:
+    bond_heartbeat_period: 0.0   # no bond to the lifecycle manager (bond_timeout 0 there); saves a 10 Hz heartbeat pair per node
     global_frame: map
     robot_base_frame: base_footprint
     odom_topic: /odom
@@ -33,6 +34,7 @@ bt_navigator:
 # ── Global planner: Hybrid A* (designed for Ackermann / car-like robots) ─────
 planner_server:
   ros__parameters:
+    bond_heartbeat_period: 0.0
     planner_plugins: [GridBased]
     GridBased:
       plugin: nav2_smac_planner::SmacPlannerHybrid
@@ -74,6 +76,7 @@ planner_server:
 # ── Local controller: Regulated Pure Pursuit (handles min turning radius) ─────
 controller_server:
   ros__parameters:
+    bond_heartbeat_period: 0.0
     controller_frequency: 10.0
     min_x_velocity_threshold: 0.001
     min_y_velocity_threshold: 0.5      # suppress noise — Ackermann has no lateral velocity
@@ -175,6 +178,7 @@ controller_server:
 # ── Recovery behaviors (spin omitted — Ackermann cannot spin in place) ────────
 behavior_server:
   ros__parameters:
+    bond_heartbeat_period: 0.0
     cycle_frequency: 10.0
     local_frame: odom
     global_frame: map
@@ -192,26 +196,6 @@ behavior_server:
     wait:
       plugin: nav2_behaviors::Wait
 
-smoother_server:
-  ros__parameters:
-    smoother_plugins: [simple_smoother]
-    simple_smoother:
-      plugin: nav2_smoother::SimpleSmoother
-      tolerance: 1.0e-10
-      max_its: 1000
-      do_refinement: true
-
-waypoint_follower:
-  ros__parameters:
-    loop_rate: 20
-    stop_on_failure: false
-    waypoint_task_executor_plugin: wait_at_waypoint
-    wait_at_waypoint:
-      plugin: nav2_waypoint_follower::WaitAtWaypoint
-      enabled: true
-      waypoint_pause_duration: 0
-
-# ── Costmaps ──────────────────────────────────────────────────────────────────
 local_costmap:
   local_costmap:
     ros__parameters:

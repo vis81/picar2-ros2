@@ -62,6 +62,7 @@ def generate_launch_description():
                 'use_sim_time': use_sim_time,
                 'autostart':    True,
                 'node_names':   ['map_server', 'amcl'],
+                'bond_timeout': 0.0,      # see nav2.launch.py
             }],
         ),
     ])

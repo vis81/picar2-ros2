@@ -44,13 +44,14 @@ def generate_launch_description():
     # Assumes bringup + cartographer are already running.
     # Nav2 subscribes to /map (from cartographer), /odom and TF (from EKF),
     # and /scan (from lidar_node). It publishes /cmd_vel consumed by the relay.
+    # No smoother_server (nothing in our BTs calls it) and no
+    # waypoint_follower (routes are NavigateThroughPoses from the web UI):
+    # together they were 15 % of a Pi core doing nothing.
     lifecycle_nodes = [
         'controller_server',
         'planner_server',
         'behavior_server',
-        'smoother_server',
         'bt_navigator',
-        'waypoint_follower',
     ]
 
     return LaunchDescription([
@@ -82,12 +83,6 @@ def generate_launch_description():
             parameters=[nav2_yaml, params_overlay, {'use_sim_time': use_sim_time}],
         ),
         Node(
-            package='nav2_smoother',
-            executable='smoother_server',
-            output='screen',
-            parameters=[nav2_yaml, params_overlay, {'use_sim_time': use_sim_time}],
-        ),
-        Node(
             package='nav2_bt_navigator',
             executable='bt_navigator',
             output='screen',
@@ -99,12 +94,6 @@ def generate_launch_description():
             }],
         ),
         Node(
-            package='nav2_waypoint_follower',
-            executable='waypoint_follower',
-            output='screen',
-            parameters=[nav2_yaml, params_overlay, {'use_sim_time': use_sim_time}],
-        ),
-        Node(
             package='nav2_lifecycle_manager',
             executable='lifecycle_manager',
             name='lifecycle_manager_navigation',
@@ -113,6 +102,10 @@ def generate_launch_description():
                 'use_sim_time': use_sim_time,
                 'autostart': True,
                 'node_names': lifecycle_nodes,
+                # No bonds: the manager and every node ran a 10 Hz heartbeat
+                # pair per node, 15 % of a Pi core for the four of them, and
+                # nothing here restarts a node on a broken bond anyway.
+                'bond_timeout': 0.0,
             }],
         ),
     ])
