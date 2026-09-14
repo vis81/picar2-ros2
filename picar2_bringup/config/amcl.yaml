@@ -53,7 +53,10 @@ amcl:
     laser_model_type: likelihood_field
     laser_max_range: 5.0
     laser_min_range: -1.0     # -1 = use sensor's own min
-    max_beams: 180
+    # 90, not 180: AMCL was 39 % of a Pi core while driving at 1.2 m/s, 21 %
+    # with 90 beams, and odom-check on the two bags is identical (lateral
+    # 3 cm, yaw 1.0 deg). #12
+    max_beams: 90
     laser_likelihood_max_dist: 2.0
     # 0.05 (was 0.1): offline likelihood contrast on the 2026-09-13 bags
     # is 4x sharper at one map cell; z_rand keeps the weights off zero
