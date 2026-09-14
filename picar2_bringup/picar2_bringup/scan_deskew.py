@@ -56,8 +56,11 @@ class ScanDeskew(Node):
         self.max_lead = float(self.get_parameter('max_lead').value)
 
         self.buf = Buffer(cache_time=Duration(seconds=5.0))
-        # Own thread for /tf, so a slow scan callback never starves it.
-        self.listener = TransformListener(self.buf, self, spin_thread=True)
+        # Own node and thread for /tf, so a slow scan callback never starves
+        # it. node=None matters: rclpy moves a node to whichever executor
+        # added it last, so a spin_thread on *this* node is undone by
+        # rclpy.spin() in main and the listener thread spins nothing.
+        self.listener = TransformListener(self.buf, None, spin_thread=True)
         qos = QoSProfile(depth=5, reliability=ReliabilityPolicy.BEST_EFFORT)
         self.pub = self.create_publisher(
             LaserScan, self.get_parameter('output').value, qos)
