@@ -129,6 +129,24 @@ controller_server:
       # 0.70: 0.7 m brakes smoothly into the pinch but taxes every corner
       # (-4 s/lap); 0.3 m changes nothing at the pinch. Left off.
       cost_lookahead_dist: 0.0
+      # picar2 fork only: Dynamic Window Pure Pursuit (Nav2 main #5783),
+      # used here to limit linear ACCELERATION only. The launches out of
+      # corners were spawning reverse shunts at 1.0 m/s (sim f1_route:
+      # 22.9 s / 18% reversing -> 19.1 s / 0 with accel 0.8). Decel and the
+      # angular limits are left open so braking and steering stay RPP's
+      # own; decel limits are negative by upstream convention.
+      use_dynamic_window: true
+      # The window's lower bound is clamped at min_linear_vel; at the
+      # upstream default 0.0 the controller could never command reverse
+      # (a "Go to" behind the robot just sat there). The relay caps
+      # reverse at 0.25 m/s anyway.
+      min_linear_vel: -0.5
+      max_linear_accel: 0.8
+      max_linear_decel: -100.0
+      max_angular_vel: 10.0
+      min_angular_vel: -10.0
+      max_angular_accel: 1000.0
+      max_angular_decel: -1000.0
       inflation_cost_scaling_factor: 5.0
       regulated_linear_scaling_min_radius: 0.9
       regulated_linear_scaling_min_speed: 0.15
