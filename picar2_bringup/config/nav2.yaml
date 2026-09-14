@@ -100,7 +100,12 @@ controller_server:
       desired_linear_vel: 0.40
       lookahead_dist: 1.0
       min_lookahead_dist: 0.4
-      max_lookahead_dist: 2.0
+      # 1.2, not 2.0: the carrot is lookahead_time x speed, and at 1.5 m/s
+      # a 1.5 m carrot sits past the 0.5 m-radius bend at the wp1 exit, so
+      # the chord to it is straight and the robot drives 0.3 m inside the
+      # planned line into the corner (bags 20260914-074924/090942). Capped
+      # at 1.2 m the corners are steered as at 1.2 m/s, where they were fine.
+      max_lookahead_dist: 1.2
       lookahead_time: 1.0
       transform_tolerance: 0.3
       use_velocity_scaled_lookahead_dist: true
