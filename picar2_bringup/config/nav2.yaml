@@ -147,6 +147,10 @@ controller_server:
       min_angular_vel: -10.0
       max_angular_accel: 1000.0
       max_angular_decel: -1000.0
+      # picar2 fork only: cap the collision projection at 0.75 m whatever the
+      # speed (1.0 s x 0.95 m/s brushed the corridor walls on every curve:
+      # f1b sim 26.6 s with stalls -> 21.1 s clean at 0.95, no change at 1.0).
+      max_collision_check_dist: 0.75
       inflation_cost_scaling_factor: 5.0
       regulated_linear_scaling_min_radius: 0.9
       regulated_linear_scaling_min_speed: 0.15
