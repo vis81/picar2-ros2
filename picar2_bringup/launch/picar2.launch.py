@@ -7,7 +7,7 @@ from launch.actions import (DeclareLaunchArgument, EmitEvent,
 from launch.conditions import IfCondition
 from launch.events import matches_action
 from launch.launch_description_sources import PythonLaunchDescriptionSource
-from launch.substitutions import PythonExpression, Command, EqualsSubstitution, LaunchConfiguration
+from launch.substitutions import Command, EqualsSubstitution, LaunchConfiguration
 from launch_ros.actions import ComposableNodeContainer, LifecycleNode, Node
 from launch_ros.descriptions import ComposableNode
 from launch_ros.event_handlers import OnStateTransition
@@ -250,9 +250,22 @@ def generate_launch_description():
         output='screen',
     )
 
-    # The LD19 and the SEN0628 are brought up - and back up after a USB
-    # unplug/replug - by sensor_watchdog below, not by a lifecycle manager
-    # or launch-time transition events: those do it once, at start.
+    # Both drivers handle a lost device themselves (close on error, reopen
+    # when the path is back), so the lifecycle handling here is the one-time
+    # bring-up. No bond: nothing restarts the lidar on a broken one, and the
+    # heartbeat pair costs CPU.
+    lidar_ld19_lc_mgr = Node(
+        package='nav2_lifecycle_manager',
+        executable='lifecycle_manager',
+        name='lidar_lifecycle_manager',
+        output='screen',
+        condition=lidar_is('ld19'),
+        parameters=[{
+            'autostart':  True,
+            'node_names': ['lidar_node'],
+            'bond_timeout': 0.0,
+        }],
+    )
 
     # ── SEN0628 matrix ToF sensor — front of car (replaces LD07) ────────────
     # Publishes /sen0628/pointcloud in sen0628_link frame.
@@ -284,22 +297,6 @@ def generate_launch_description():
             lifecycle_node_matcher=matches_action(sen0628_node),
             transition_id=Transition.TRANSITION_ACTIVATE))]))
 
-    # Watches /dev/ldlidar once a second and drives the LD19's lifecycle from
-    # that: configure+activate when the device is there, deactivate+cleanup
-    # when it goes, and again when it comes back. Until the driver itself
-    # does this (it is upstream code), this is what makes a replug work.
-    sensor_watchdog = Node(
-        package='picar2_bringup',
-        executable='sensor_watchdog.py',
-        name='sensor_watchdog',
-        output='screen',
-        condition=lidar_is('ld19'),
-        parameters=[{
-            'names': ['ld19'],
-            'devices': ['/dev/ldlidar'],
-            'nodes': ['lidar_node'],
-        }],
-    )
 
     # Statistical outlier removal: removes points whose mean distance to their
 
@@ -437,7 +434,7 @@ def generate_launch_description():
         lidar_ld19_container,
         sen0628_configure,
         sen0628_activate,
-        sensor_watchdog,
+        lidar_ld19_lc_mgr,
         lidar_ld19_deskew,
         cpu_monitor,
         sen0628_node,
