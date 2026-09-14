@@ -113,7 +113,12 @@ controller_server:
       transform_tolerance: 0.3
       use_velocity_scaled_lookahead_dist: true
       min_approach_linear_velocity: 0.15
-      approach_velocity_scaling_dist: 1.0
+      # 2.0, not 1.0: the ramp is v_max x (distance left / this), so at
+      # 1.5 m/s a 1.0 m ramp still commands 0.36 m/s at the 0.25 m goal
+      # circle and the car coasts past the goal; 2.0 arrives at ~0.19 m/s
+      # (sim open_straight_fast) for ~1.5 s more per "Go to". Routes in flow
+      # mode never approach a final goal and are unaffected. #2
+      approach_velocity_scaling_dist: 2.0
       use_collision_detection: true
       # NOTE: the parameter is *_up_to_carrot. The *_up_to_goal name does not
       # exist in this RPP version, so it was silently ignored and the 1.0 s

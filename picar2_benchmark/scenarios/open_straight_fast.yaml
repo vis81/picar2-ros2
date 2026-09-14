@@ -1,0 +1,10 @@
+name: open_straight_fast
+description: >
+  open_straight with room to overshoot: a 3.5 m straight to a goal 2.5 m from
+  the far wall, for the goal-approach work at 1.5 m/s (#2). The overshoot
+  past the goal is what the bag is read for.
+world: {size: [9.0, 4.5], rtf: 0.5, max_step: 0.001}
+obstacles: []
+start: {x: -1.5, y: 0.0, yaw: 0.0}
+goal:  {x:  2.0, y: 0.0, yaw: 0.0}
+timeout_s: 60

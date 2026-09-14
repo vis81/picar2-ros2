@@ -1,0 +1,8 @@
+# 1.5 m/s with the approach ramp starting 2.5 m out instead of 1.0: at
+# 1.5 m/s the 1.0 m ramp still arrives at the 0.25 m goal circle at ~0.4 m/s
+# and the car coasts past the goal (#2).
+controller_server:
+  ros__parameters:
+    FollowPath:
+      desired_linear_vel: 1.5
+      approach_velocity_scaling_dist: 2.5
