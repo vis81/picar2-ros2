@@ -151,6 +151,13 @@ controller_server:
       # 0.70: 0.7 m brakes smoothly into the pinch but taxes every corner
       # (-4 s/lap); 0.3 m changes nothing at the pinch. Left off.
       cost_lookahead_dist: 0.0
+      # picar2 fork only: the speed is regulated on the sharpest bend of the
+      # path within this many metres ahead (Menger curvature on 0.3 m
+      # triples), so braking starts before a corner instead of inside it.
+      # Sim f1b at 1.5, same session: off 13.99 s / min clearance 0.039 m,
+      # 0.8 m window 13.58 / 0.061, 1.2 m 13.78 / 0.081. Needs the fork's
+      # RPP from d7c231aa6 on (speed only, never steering). 0 = off.
+      path_curvature_lookahead_dist: 1.2
       # picar2 fork only: Dynamic Window Pure Pursuit (Nav2 main #5783),
       # used here to limit linear ACCELERATION only. The launches out of
       # corners were spawning reverse shunts at 1.0 m/s (sim f1_route:
