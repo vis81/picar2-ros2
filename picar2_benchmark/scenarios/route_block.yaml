@@ -23,7 +23,7 @@ description: >
   flow mode: a controller that never stops has to carry speed through it.
 world: {size: [6.8, 4.9], rtf: 0.5, max_step: 0.001}
 obstacles:
-  - {x: 0.0, y: 0.0, sx: 3.5, sy: 1.6, sz: 1.0}
+  - {x: 0.0, y: 0.0, sx: 3.5, sy: 1.6, sz: 0.3}
 start: {x: 1.76, y: 1.63, yaw: 0.0}
 goal:  {x: 0.0, y: 0.0, yaw: 0.0}     # unused on a route; kept for the loader
 route:

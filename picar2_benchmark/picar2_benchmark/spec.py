@@ -31,11 +31,11 @@ class Box:
     y: float
     sx: float
     sy: float
-    # Height. Walls default to full height; a low box is how an obstacle the
-    # lidar cannot see is expressed — the LD19 scan plane sits 0.1485 m above
-    # the ground, so anything shorter is invisible to it and only the front
-    # ToF can find it.
-    sz: float = 1.0
+    # Height. Walls default to 0.3 m: twice the LD19 scan plane (0.1485 m),
+    # so the lidar sees them, and low enough that the Gazebo GUI shows the
+    # robot instead of a maze of 1 m boxes. A low box (under the scan plane)
+    # is how an obstacle only the front ToF can find is expressed.
+    sz: float = 0.3
     # Whether the box appears in the static map. An unmapped obstacle exists in
     # the simulated world but not in the map the planner starts from, so the
     # robot has to discover it with its sensors. That is the only way to test

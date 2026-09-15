@@ -2,7 +2,7 @@ from pathlib import Path
 
 from ament_index_python.packages import get_package_share_directory
 from launch import LaunchDescription
-from launch.actions import DeclareLaunchArgument, IncludeLaunchDescription
+from launch.actions import AppendEnvironmentVariable, DeclareLaunchArgument, IncludeLaunchDescription
 from launch.conditions import IfCondition
 from launch.launch_description_sources import PythonLaunchDescriptionSource
 from launch.substitutions import Command, LaunchConfiguration, PythonExpression
@@ -59,6 +59,13 @@ def generate_launch_description():
         '("-s -r " if "', LaunchConfiguration('headless'), '" == "true" else "-r ") + "',
         LaunchConfiguration('world'), '"',
     ])
+
+    # Gazebo resolves the URDF's package://picar2_description/meshes/... only
+    # if the package's share parent is on its resource path. `make sim` set
+    # it in the shell; the benchmark runner and `gz sim -g` did not, and the
+    # robot came up invisible in the GUI.
+    gz_resources = AppendEnvironmentVariable(
+        'GZ_SIM_RESOURCE_PATH', str(Path(desc_share).parent))
 
     gazebo = IncludeLaunchDescription(
         PythonLaunchDescriptionSource(
@@ -175,6 +182,7 @@ def generate_launch_description():
 
     return LaunchDescription([
         world_arg,
+        gz_resources,
         spawn_x_arg,
         spawn_y_arg,
         spawn_yaw_arg,

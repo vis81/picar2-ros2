@@ -31,9 +31,10 @@ from pathlib import Path
 import numpy as np
 import yaml
 
-# Tall enough that the LD19's scan plane at 0.1485 m sees them, and tall enough
-# not to be a low obstacle the ToF alone has to catch — a map's walls are walls.
-WALL_HEIGHT = 1.0
+# 0.3 m: twice the LD19's scan plane (0.1485 m), so the lidar sees every
+# wall, and low enough that the Gazebo GUI shows the robot and the route
+# instead of a maze of 1 m boxes. A map's walls are walls either way.
+WALL_HEIGHT = 0.3
 
 
 def read_pgm(path: Path) -> np.ndarray:

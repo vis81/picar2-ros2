@@ -43,7 +43,7 @@ _LIGHT_AND_GROUND = """
     </model>
 """
 
-WALL_HEIGHT = 1.0
+WALL_HEIGHT = 0.3
 
 
 def _box_model(name: str, b: Box) -> str:
