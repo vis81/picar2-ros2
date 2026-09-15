@@ -269,15 +269,17 @@ def generate_launch_description():
 
     # ── SEN0628 matrix ToF sensor — front of car (replaces LD07) ────────────
     # Publishes /sen0628/pointcloud in sen0628_link frame.
+    # sen0628_tof is the C++ port of tof_imager_ros (same node, topics and
+    # parameters; 17 % of a Pi core -> ~2 %). The Python one stays in src/.
     sen0628_node = LifecycleNode(
-        package='tof_imager_ros',
-        executable='tof_imager_publisher',
+        package='sen0628_tof',
+        executable='tof_imager',
         name='tof_imager',
         namespace='',
         output='screen',
         condition=IfCondition(LaunchConfiguration('use_sen0628')),
         parameters=[
-            str(Path(get_package_share_directory('tof_imager_ros')) / 'config' / 'sensor_params.yaml'),
+            str(Path(get_package_share_directory('sen0628_tof')) / 'config' / 'sensor_params.yaml'),
             {'frame_id': 'sen0628_link',
              'serial_port': LaunchConfiguration('sen0628_port')},
         ],
