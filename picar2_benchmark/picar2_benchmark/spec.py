@@ -81,6 +81,11 @@ class Scenario:
     # Declared bounds on the trial result — see check_expectations. Optional:
     # a scenario with none is measured but cannot fail.
     expect: dict | None = None
+    # Localisation modes this scenario is meant for. Default: all three, and
+    # then the goal must be inside what the lidar sees from the start (slam
+    # builds its map from there). A scenario whose whole point is a goal
+    # around a corner declares [ground_truth] (or [ground_truth, amcl]).
+    modes: list | None = None
 
     @property
     def route_waypoints(self) -> list[Pose]:
@@ -322,6 +327,7 @@ def load(path: str | Path) -> Scenario:
         explore=raw.get('explore'),
         route=raw.get('route'),
         expect=raw.get('expect'),
+        modes=raw.get('modes'),
         rtf=float(world.get('rtf', 0.5)),
         max_step=float(world.get('max_step', 0.001)),
         description=raw.get('description', ''),
@@ -366,6 +372,8 @@ def validate(sc: Scenario) -> None:
     # Every scenario must be runnable in all three localisation modes, so that
     # ground_truth / slam / amcl are comparable on identical geometry. slam is
     # the binding constraint: see slam_envelope.
+    if sc.modes and 'slam' not in sc.modes:
+        return                     # no cold-start map to fit the goal into
     x0, y0, x1, y1 = slam_envelope(sc)
     m = 0.30                       # keep the goal off the very edge of the map
     if not (x0 + m <= sc.goal.x <= x1 - m and y0 + m <= sc.goal.y <= y1 - m):

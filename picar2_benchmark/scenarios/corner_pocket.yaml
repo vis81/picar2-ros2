@@ -1,0 +1,26 @@
+name: corner_pocket
+description: >
+  A car that scrapes into a corner cannot reverse straight out of it: its
+  rear points at the corner's other wall and BackUp fails at once, the
+  planner says "Start occupied", and nothing moves the robot again (bag
+  20260914-193111, 209 s). The retrace backup (#1) replays the way in.
+
+  An 0.8 m corridor turns 90 degrees left into a pocket. The pocket holds an
+  unmapped box just past the bend, so the robot plans through, drives the
+  bend, meets the box at close range while still turned, and has to back
+  out - straight (blocked by the corner) or along its own arc. The goal is
+  behind the box and never reached; the bag says whether the backups
+  succeeded and how far the robot got back out.
+world: {size: [8.0, 6.0], rtf: 0.5, max_step: 0.001}
+obstacles:
+  # corridor along +x, y in [-0.4, 0.4], from x=-3.5 to the bend at x=0.4
+  - {x: -1.55, y:  0.5, sx: 3.9, sy: 0.2}     # top wall, ends where the pocket opens
+  - {x: -1.35, y: -0.5, sx: 4.3, sy: 0.2}     # bottom wall, runs on to the bend's outer wall
+  - {x:  0.9,  y:  0.9, sx: 0.2, sy: 3.0}     # bend outer wall / pocket right wall
+  - {x: -0.5,  y:  1.45, sx: 0.2, sy: 1.9}     # pocket left wall
+  - {x:  0.2,  y:  2.3, sx: 1.2, sy: 0.2}     # pocket end
+  - {x:  0.2,  y:  1.15, sx: 0.5, sy: 0.15, mapped: false}   # the surprise, just past the bend
+start: {x: -3.0, y: 0.0, yaw: 0.0}
+goal:  {x:  0.2, y: 1.6, yaw: 1.5708}
+timeout_s: 90
+modes: [ground_truth, amcl]   # the goal is around a corner by design
