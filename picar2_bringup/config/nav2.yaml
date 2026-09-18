@@ -171,7 +171,13 @@ controller_server:
       # reverse at 0.25 m/s anyway.
       min_linear_vel: -0.5
       max_linear_accel: 0.8
-      max_linear_decel: -100.0
+      # -2.5, not -100 (unlimited): the firmware short-brakes on a zero
+      # command since 2026-09-18 (#24), so a one-step drop to 0 stops a
+      # 1 m/s car in 0.37 m and pitches it. The window ramps the command
+      # down at 2.5 m/s2 first (0.4 s / 0.2 m from 1 m/s, 0.7 s / 0.65 m
+      # from 1.8) and the brake finishes the last few cm. Slower than
+      # 0.8 m/s2 accel by design: stopping must always win.
+      max_linear_decel: -2.5
       max_angular_vel: 10.0
       min_angular_vel: -10.0
       max_angular_accel: 1000.0
