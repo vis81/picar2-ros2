@@ -21,7 +21,7 @@ from geometry_msgs.msg import Twist
 from nav_msgs.msg import Path
 from nav2_msgs.msg import BehaviorTreeLog
 
-from .geometry import clearance
+from .geometry import clearance, poly_box_distance
 
 
 def path_cusps(path: Path) -> int:
@@ -84,6 +84,13 @@ class Recorder:
         # (gt_x, gt_y, gt_yaw, believed_x, believed_y, believed_yaw)
         self.loc_pairs: list[tuple] = []
         self.clearances: list[tuple[float, float]] = []
+        # Unmapped boxes on their own: the whole point of a scenario with
+        # one is how the robot deals with what its map does not show.
+        self.surprises = [b for b in boxes if not b.mapped]
+        self.surprise_clear: list[float] = []       # footprint clearance to them
+        self.plan_surprise: list[float] = []        # each plan's clearance to them
+        self.collision_stops = 0                    # controller "collision ahead" episodes
+        self._last_coll_t = -10.0
         self.plans: list[tuple[float, int, float]] = []   # t, cusps, length
         self.plan_curv: list[float] = []                 # 1/R asked for by the plan
         self.pruned: list[tuple[float, int, float]] = []
@@ -94,6 +101,9 @@ class Recorder:
         node.create_subscription(BehaviorTreeLog, '/behavior_tree_log', self._on_bt, 50)
         node.create_subscription(Twist, '/cmd_vel', self._on_cmd, 20)
         node.create_subscription(Path, '/plan', self._on_plan, 5)
+        if self.surprises:
+            from rcl_interfaces.msg import Log
+            node.create_subscription(Log, '/rosout', self._on_rosout, 50)
         node.create_subscription(Path, '/received_global_plan', self._on_pruned, 5)
         node.create_subscription(GoalStatusArray, '/compute_path_to_pose/_action/status',
                                  lambda m: self._on_status(m, self.planner_status), 20)
@@ -115,6 +125,17 @@ class Recorder:
     def _on_plan(self, msg):
         self.plans.append((self._t(), path_cusps(msg), path_length(msg)))
         self.plan_curv.extend(path_curvatures(msg))
+        if self.surprises and msg.poses:
+            pts = [(p.pose.position.x, p.pose.position.y) for p in msg.poses]
+            self.plan_surprise.append(min(
+                poly_box_distance([pt], b) for pt in pts for b in self.surprises))
+
+    def _on_rosout(self, msg):
+        if 'collision ahead' in msg.msg:
+            t = self._t()
+            if t - self._last_coll_t > 2.0:     # one episode, not one per tick
+                self.collision_stops += 1
+            self._last_coll_t = t
 
     def _on_pruned(self, msg):
         self.pruned.append((self._t(), path_cusps(msg), path_length(msg)))
@@ -130,6 +151,8 @@ class Recorder:
         t = self._t()
         self.pose.append((t, x, y, yaw))
         self.clearances.append((t, clearance((x, y, yaw), self.boxes)))
+        if self.surprises:
+            self.surprise_clear.append(clearance((x, y, yaw), self.surprises))
         self._sample_loc_error(x, y, yaw)
 
     def _sample_loc_error(self, gx: float, gy: float, gyaw: float) -> None:
@@ -333,6 +356,12 @@ class Recorder:
             m['min_clearance_m'] = round(min(vals), 3)
             m['time_below_5cm_s'] = round(sum(
                 1 for v in vals if v < 0.05) * 0.05, 1)
+        if self.surprises:
+            m['surprise_min_clearance_m'] = round(min(self.surprise_clear), 3) if self.surprise_clear else None
+            m['surprise_contact'] = bool(self.surprise_clear and min(self.surprise_clear) <= 0.0)
+            near = [c for c in self.plan_surprise if c < 1.0]
+            m['plan_surprise_clearance_min_m'] = round(min(near), 3) if near else None
+            m['collision_stops'] = self.collision_stops
         if self.plan_curv:
             c = sorted(self.plan_curv)
             m['plan_curvature_median'] = round(c[len(c) // 2], 3)

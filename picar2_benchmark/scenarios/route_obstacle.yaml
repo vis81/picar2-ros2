@@ -1,0 +1,28 @@
+name: route_obstacle
+description: >
+  route_block with an unmapped box on the route (#22): the robot laps the
+  corridor at speed and meets a 0.3 x 0.3 m box that is not in its map, 1 m
+  past a corner on the long side, on the centre line, so the robot has to
+  swerve 0.25 m either way to pass it in the 1.62 m corridor. Measured: contacts (min clearance to the
+  box), collision-ahead stops, plan clearance, lap time against route_block.
+
+  The box is on the second leg (wp1 -> wp2, the long bottom side), 1.0 m
+  after wp1 - the geometry of the F1b run where
+  a box 0.9 m past wp2 and 0.85 m off the line was hit on 5 of 20 laps at
+  the 2.0 cap before the fixes.
+world: {size: [6.8, 4.9], rtf: 0.5, max_step: 0.001}
+obstacles:
+  - {x: 0.0, y: 0.0, sx: 3.5, sy: 1.6, sz: 0.3}
+  - {x: 1.56, y: -1.63, sx: 0.3, sy: 0.3, sz: 0.3, mapped: false}   # the surprise, on the centre line
+start: {x: 1.76, y: 1.63, yaw: 0.0}
+goal:  {x: 0.0, y: 0.0, yaw: 0.0}     # unused on a route; kept for the loader
+route:
+  loop: true
+  laps: 3
+  timeout_s: 600
+  capture_radius_m: 0.45
+  waypoints:
+    - {x:  2.56, y:  1.63, yaw: -1.5708}
+    - {x:  2.56, y: -1.63, yaw:  3.1416}
+    - {x: -2.56, y: -1.63, yaw:  1.5708}
+    - {x: -2.56, y:  1.63, yaw:  0.0}
