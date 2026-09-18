@@ -297,7 +297,7 @@ class RouteRunner:
 
 def run_trial(scenario: str, out_dir: Path, gen_dir: Path, mode: str = 'flow',
               keep_up: bool = False, sensor_noise: float = 1.0,
-              bag: bool = True, overlay: str = '') -> dict:
+              bag: bool = True, overlay: str = '', bt: str = '') -> dict:
     sc = spec.load(scenario)
     if not sc.route:
         raise SystemExit(f'{sc.name} is not a route scenario (no `route:` block)')
@@ -313,14 +313,16 @@ def run_trial(scenario: str, out_dir: Path, gen_dir: Path, mode: str = 'flow',
     logs = out_dir / 'logs' / f'{sc.name}_{mode}_{int(time.time())}'
     result: dict = {'scenario': sc.name, 'route_mode': mode,
                     'localisation': 'ground_truth', 'sensor_noise': sensor_noise,
-                    'config': Path(overlay).stem if overlay else 'baseline'}
+                    'config': (Path(bt).stem if bt else
+                               Path(overlay).stem if overlay else 'baseline')}
     # A missing overlay is not an error to launch_ros: it warns "Parameter file
     # path is not a file" and runs the baseline, so the trial would record a
     # config it never used. Same guard as runner.py, for the same reason.
-    if overlay and not Path(overlay).is_file():
-        return {**result, 'outcome': 'RUNNER_ERROR',
-                'detail': f'overlay file not found: {overlay} - if you just '
-                          f'added it, rebuild the package so it installs'}
+    for label, path in (('overlay', overlay), ('bt', bt)):
+        if path and not Path(path).is_file():
+            return {**result, 'outcome': 'RUNNER_ERROR',
+                    'detail': f'{label} file not found: {path} - if you just '
+                              f'added it, rebuild the package so it installs'}
     busy = wait_for_quiet_domain()
     if busy:
         return {**result, 'outcome': 'SIM_DEGRADED',
@@ -352,7 +354,8 @@ def run_trial(scenario: str, out_dir: Path, gen_dir: Path, mode: str = 'flow',
         stack.launch([
             'ros2', 'launch', 'picar2_bringup', 'nav2.launch.py',
             'use_sim_time:=true']
-            + ([f'params_overlay:={overlay}'] if overlay else []),
+            + ([f'params_overlay:={overlay}'] if overlay else [])
+            + ([f'nav_through_poses_bt:={bt}'] if bt else []),
             logs / 'nav2.log')
         if bag:
             stack.launch(['ros2', 'bag', 'record', '-o', str(logs / 'bag'),
@@ -419,11 +422,14 @@ def main(argv=None) -> int:
                     help='nav2 params overlay layered over nav2.yaml, e.g. the '
                          'installed configs/speed_060.yaml to drive the route at '
                          'the speed the robot was measured at')
+    ap.add_argument('--bt', default='',
+                    help='navigate_through_poses behaviour tree XML (flow mode '
+                         'drives through it; stop mode ignores it)')
     a = ap.parse_args(argv)
     out = Path(a.out)
     out.mkdir(parents=True, exist_ok=True)
     res = run_trial(a.scenario, out, Path('/tmp/picar2_bench'), a.route_mode,
-                    a.keep_up, a.sensor_noise, a.bag, a.overlay)
+                    a.keep_up, a.sensor_noise, a.bag, a.overlay, a.bt)
     exp = spec.check_expectations(spec.load(a.scenario), res)
     if exp:
         res['expectations'] = exp
