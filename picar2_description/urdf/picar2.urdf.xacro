@@ -343,13 +343,22 @@
     <dynamics damping="0.01" friction="0.0"/>
   </joint>
 
-  <!-- Front steering knuckles (revolute — single servo via linkage) -->
+  <!-- Front steering knuckles (revolute — single servo via linkage).
+       velocity=1 rad/s here throttled every sim turn to a third of the real
+       servo: Picar2Hardware writes steer_delta_us straight to the LUT and
+       never reads this field, but gz_ros2_control's position control mode
+       hands DART a velocity command and DART enforces this limit as a hard
+       actuator cap - a hard cap, not the shape of a real servo's response.
+       Step test (bare sim, cmd_vel step): the joint ramped at a dead-flat
+       59 deg/s (1.03 rad/s) into the stop, no convergence curve. Measured
+       on the robot (bag obst_fix13_curvt20): steering rate 99th pct 3.06
+       rad/s, peak 4.06. 4.0 leaves headroom without being make-believe. -->
   <joint name="front_left_steer_joint" type="revolute">
     <origin xyz="0.11922 0.065 0.0262" rpy="0 0 0"/>
     <parent link="base_link"/>
     <child  link="front_left_steer"/>
     <axis xyz="0 0 1"/>
-    <limit lower="-0.6" upper="0.6" effort="10" velocity="1"/>
+    <limit lower="-0.6" upper="0.6" effort="10" velocity="4.0"/>
     <dynamics damping="0.01" friction="0.0"/>
   </joint>
 
@@ -358,7 +367,7 @@
     <parent link="base_link"/>
     <child  link="front_right_steer"/>
     <axis xyz="0 0 1"/>
-    <limit lower="-0.6" upper="0.6" effort="10" velocity="1"/>
+    <limit lower="-0.6" upper="0.6" effort="10" velocity="4.0"/>
     <dynamics damping="0.01" friction="0.0"/>
   </joint>
 
