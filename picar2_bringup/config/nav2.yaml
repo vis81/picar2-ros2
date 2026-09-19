@@ -161,9 +161,15 @@ controller_server:
       # picar2 fork only: Dynamic Window Pure Pursuit (Nav2 main #5783),
       # used here to limit linear ACCELERATION only. The launches out of
       # corners were spawning reverse shunts at 1.0 m/s (sim f1_route:
-      # 22.9 s / 18% reversing -> 19.1 s / 0 with accel 0.8). Decel and the
-      # angular limits are left open so braking and steering stay RPP's
-      # own; decel limits are negative by upstream convention.
+      # 22.9 s / 18% reversing -> 19.1 s / 0 with accel 0.8). Decel is left
+      # open so braking stays RPP's own; decel limits are negative by
+      # upstream convention. Angular velocity is left open here too - the
+      # actual cap is cmd_vel_relay's max_angular_vel (1.2 rad/s), applied
+      # after this controller regardless of platform - but a later commit
+      # added max_angular_accel below to stop the angular command itself
+      # from stepping; don't reintroduce a second max_angular_accel line
+      # here, rcl_yaml_param_parser takes the last one silently (found via
+      # `ros2 param get` reading 1.0 while this file said 1000.0 twice).
       use_dynamic_window: true
       # The window's lower bound is clamped at min_linear_vel; at the
       # upstream default 0.0 the controller could never command reverse
@@ -180,7 +186,6 @@ controller_server:
       max_linear_decel: -2.5
       max_angular_vel: 10.0
       min_angular_vel: -10.0
-      max_angular_accel: 1000.0
       max_angular_decel: -1000.0
       # picar2 fork only: cap the collision projection at 0.75 m whatever the
       # speed (1.0 s x 0.95 m/s brushed the corridor walls on every curve:
