@@ -204,6 +204,9 @@ BAG_TOPICS = [
     # instead of needing a live `topic hz` on a robot that is usually away.
     '/sen0628/pointcloud',
     '/tf', '/tf_static', '/rosout',
+    # What the planner and controller could see: without these a "why did
+    # it plan through the box" question has no answer after the fact.
+    '/global_costmap/costmap', '/local_costmap/costmap',
     '/navigate_to_pose/_action/status', '/follow_path/_action/status',
     '/compute_path_to_pose/_action/status',
 ]
