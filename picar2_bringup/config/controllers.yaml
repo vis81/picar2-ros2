@@ -28,11 +28,8 @@ ackermann_steering_controller:
     # commands into one servo, and swapping a pair does not change its mean.
     steering_joints_names: [front_right_steer_joint, front_left_steer_joint]
 
-    # Robot geometry (metres) — from URDF joint origins
-    wheelbase:             0.235    # 0.11922 + 0.11607
-    traction_track_width:  0.1685   # 2 × 0.08425
-    steering_track_width:  0.173    # left wheel centre 0.0878 + right 0.0845
-    traction_wheels_radius: 0.033   # TODO: calibrate with measured travel distance
+    # Robot geometry (wheelbase, track widths, wheel radius) is per chassis:
+    # models/<robot_model>/controllers.yaml, layered over this file.
 
     # Odometry from encoder feedback (we have real position state interfaces)
     open_loop: false
@@ -51,5 +48,5 @@ pan_tilt_controller:
 
 cmd_vel_relay:
   ros__parameters:
-    max_angular_vel: 1.2    # rad/s — hardware max at 0.4 m/s: v/r = 0.4/0.34 ≈ 1.18
+    # max_angular_vel follows the turning radius: models/<robot_model>/controllers.yaml
     max_reverse_vel: 0.25   # m/s  — RPPC has no separate reverse speed knob

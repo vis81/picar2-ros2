@@ -20,6 +20,13 @@ def generate_launch_description():
     desc_share    = Path(get_package_share_directory('picar2_description'))
     bringup_share = Path(get_package_share_directory('picar2_bringup'))
 
+    robot_model_arg = DeclareLaunchArgument(
+        'robot_model', default_value='v1',
+        description='Which chassis: v1 (original, Pi 4) | v2 (2026-10 short chassis, Pi 5). '
+                    'Selects picar2_description/models/<model>.yaml and config/models/<model>/')
+    # config/models/<model>/ - the per-chassis overlays and calibration files
+    model_dir = [str(bringup_share / 'config' / 'models') + '/', LaunchConfiguration('robot_model')]
+
     port_arg  = DeclareLaunchArgument('port',  default_value='/dev/ttyYahboom0')
     baud_arg  = DeclareLaunchArgument('baud',  default_value='460800')
     lidar_arg = DeclareLaunchArgument(
@@ -51,7 +58,7 @@ def generate_launch_description():
                                             description='Joystick config name in picar2_bringup/config/<name>.yaml')
     calib_arg = DeclareLaunchArgument(
         'calib_file',
-        default_value=str(bringup_share / 'config' / 'imu_calib.yaml'),
+        default_value=model_dir + ['/imu_calib.yaml'],
         description='imu-calib-ros calibration file (gyro + accel bias/scale)')
 
     robot_description = ParameterValue(
@@ -60,10 +67,14 @@ def generate_launch_description():
             ' port:=', LaunchConfiguration('port'),
             ' baud:=', LaunchConfiguration('baud'),
             ' lidar:=', LaunchConfiguration('lidar'),
+            ' robot_model:=', LaunchConfiguration('robot_model'),
         ]),
         value_type=str)
 
-    controllers_yaml = str(bringup_share / 'config' / 'controllers.yaml')
+    # Geometry (wheelbase, tracks, wheel radius, turning rate) is layered
+    # over the shared file from the chassis's own overlay; later wins.
+    controllers_yaml = [str(bringup_share / 'config' / 'controllers.yaml'),
+                        model_dir + ['/controllers.yaml']]
 
     def lidar_is(model):
         return IfCondition(EqualsSubstitution(LaunchConfiguration('lidar'), model))
@@ -72,10 +83,7 @@ def generate_launch_description():
     ros2_control_node = Node(
         package='controller_manager',
         executable='ros2_control_node',
-        parameters=[
-            {'robot_description': robot_description},
-            controllers_yaml,
-        ],
+        parameters=[{'robot_description': robot_description}, *controllers_yaml],
         output='both',
     )
 
@@ -117,7 +125,7 @@ def generate_launch_description():
         executable='cmd_vel_relay.py',
         name='cmd_vel_relay',
         output='screen',
-        parameters=[controllers_yaml],
+        parameters=controllers_yaml,
     )
 
     ekf_node = Node(
@@ -161,7 +169,7 @@ def generate_launch_description():
     # Only active when use_mag:=true. Loads hard-iron bias from calibration
     # file, subtracts it from /imu/mag and republishes as /imu/mag_unbiased.
     # Calibrate with: ros2 service call /calibrate_magnetometer std_srvs/srv/Trigger {}
-    mag_calib_file = str(bringup_share / 'config' / 'magnetometer_calib.yaml')
+    mag_calib_file = model_dir + ['/magnetometer_calib.yaml']
 
     mag_bias_observer = Node(
         package='magnetometer_pipeline',
@@ -405,6 +413,7 @@ def generate_launch_description():
     )
 
     return LaunchDescription([
+        robot_model_arg,
         port_arg,
         baud_arg,
         lidar_arg,

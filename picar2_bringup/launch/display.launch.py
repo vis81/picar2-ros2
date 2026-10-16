@@ -17,8 +17,12 @@ def generate_launch_description():
         'gui', default_value='true',
         description='Launch joint_state_publisher_gui for interactive joint control')
 
+    robot_model_arg = DeclareLaunchArgument(
+        'robot_model', default_value='v1', description='Which chassis: v1 | v2')
+
     robot_description = ParameterValue(
-        Command(['xacro ', str(desc_share / 'urdf' / 'picar2.urdf.xacro')]),
+        Command(['xacro ', str(desc_share / 'urdf' / 'picar2.urdf.xacro'),
+                 ' robot_model:=', LaunchConfiguration('robot_model')]),
         value_type=str)
 
     robot_state_publisher = Node(
@@ -38,6 +42,7 @@ def generate_launch_description():
         output='screen')
 
     return LaunchDescription([
+        robot_model_arg,
         gui_arg,
         robot_state_publisher,
         joint_state_publisher_gui,

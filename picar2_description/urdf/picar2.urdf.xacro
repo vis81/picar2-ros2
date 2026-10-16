@@ -5,6 +5,9 @@
   <xacro:arg name="baud"    default="460800"/>
   <xacro:arg name="use_sim" default="false"/>
   <xacro:arg name="lidar"   default="lds02rr"/>
+  <!-- Which chassis: models/<robot_model>.yaml holds every dimension, mount
+       and the steering LUT that differ between the robots. -->
+  <xacro:arg name="robot_model" default="v1"/>
   <!-- Scales every simulated sensor noise stddev. Gazebo Harmonic exposes no
        RNG seed, so sensor noise is the one source of run-to-run variance that
        cannot be seeded away. sensor_noise:=0.0 removes it entirely, which turns
@@ -13,6 +16,8 @@
   <xacro:arg name="sensor_noise" default="1.0"/>
   <xacro:property name="noise_scale" value="$(arg sensor_noise)"/>
   <xacro:property name="lidar_model"    value="$(arg lidar)"/>
+  <xacro:property name="m" value="${xacro.load_yaml('$(find picar2_description)/models/$(arg robot_model).yaml')}"/>
+  <xacro:property name="lidar_mount" value="${m['lidar_mount'].get(lidar_model, m['lidar_mount']['default'])}"/>
   <xacro:property name="ld07_tilt_rad"  value="0.2793"/>  <!-- 16° mount angle -->
 
   <!-- ═══════════════════════════════════════════════════
@@ -28,11 +33,8 @@
         <plugin>picar2_control/Picar2Hardware</plugin>
         <param name="port">$(arg port)</param>
         <param name="baud">$(arg baud)</param>
-        <!-- Steering LUT: delta_us from servo center (ascending) and steer_rad in ROS convention
-             (positive = left turn, so positive deg measurement is negated here).
-             Measured 2026-05-22 from wheel-angle photo; refine with odom_cal circle test. -->
-        <param name="steer_lut_us">-595 -454 -410 -364 -329 -299 -271 -252 -202 -151 -121 -101 128 154	193	257	308	354	433	464	493	545</param>
-        <param name="steer_lut_rad">0.6756 0.5308 0.4578 0.4058 0.3513 0.3176 0.2790 0.2443 0.1994 0.1392 0.1062 0.0668 -0.1276 -0.1646 -0.2049 -0.2829	-0.3129	-0.3681	-0.4680	-0.4844	-0.5078	-0.6109</param>
+        <param name="steer_lut_us">${' '.join(map(str, m['steer_lut_us']))}</param>
+        <param name="steer_lut_rad">${' '.join(map(str, m['steer_lut_rad']))}</param>
         <!-- 30, not the driver's 50 default. The EKF runs at 50 Hz and is fed
              IMU at exactly its own rate with no headroom; on the robot it
              logged 1120 "Failed to meet update rate" in one session while the
@@ -104,6 +106,7 @@
       <plugin filename="gz_ros2_control-system"
               name="gz_ros2_control::GazeboSimROS2ControlPlugin">
         <parameters>$(find picar2_bringup)/config/controllers.yaml</parameters>
+        <parameters>$(find picar2_bringup)/config/models/$(arg robot_model)/controllers.yaml</parameters>
       </plugin>
       <!-- Ground-truth pose for the navigation benchmark. Simulation only, so
            the real robot is unaffected. This exists because the ground truth
@@ -144,8 +147,8 @@
       <material name=""><color rgba="0 0.62745 0.23529 1"/></material>
     </visual>
     <collision>
-      <origin xyz="0 0 0.04" rpy="0 0 0"/>
-      <geometry><box size="0.24 0.17 0.08"/></geometry>
+      <origin xyz="${m['chassis_collision']['xyz']}" rpy="0 0 0"/>
+      <geometry><box size="${m['chassis_collision']['size']}"/></geometry>
     </collision>
   </link>
 
@@ -164,7 +167,7 @@
     </visual>
     <collision>
       <origin xyz="0 0 0" rpy="1.5708 0 0"/>
-      <geometry><cylinder radius="0.033" length="0.025"/></geometry>
+      <geometry><cylinder radius="${m['wheel_radius']}" length="${m['wheel_width']}"/></geometry>
     </collision>
   </link>
 
@@ -183,7 +186,7 @@
     </visual>
     <collision>
       <origin xyz="0 0 0" rpy="1.5708 0 0"/>
-      <geometry><cylinder radius="0.033" length="0.025"/></geometry>
+      <geometry><cylinder radius="${m['wheel_radius']}" length="${m['wheel_width']}"/></geometry>
     </collision>
   </link>
 
@@ -221,7 +224,7 @@
     </visual>
     <collision>
       <origin xyz="0 0 0" rpy="1.5708 0 0"/>
-      <geometry><cylinder radius="0.033" length="0.025"/></geometry>
+      <geometry><cylinder radius="${m['wheel_radius']}" length="${m['wheel_width']}"/></geometry>
     </collision>
   </link>
 
@@ -259,7 +262,7 @@
     </visual>
     <collision>
       <origin xyz="0 0 0" rpy="1.5708 0 0"/>
-      <geometry><cylinder radius="0.033" length="0.025"/></geometry>
+      <geometry><cylinder radius="${m['wheel_radius']}" length="${m['wheel_width']}"/></geometry>
     </collision>
   </link>
 
@@ -317,18 +320,18 @@
   <joint name="base_joint" type="fixed">
     <parent link="base_footprint"/>
     <child  link="base_link"/>
-    <origin xyz="0.11607 0.0 0.0215" rpy="0 0 0"/>
+    <origin xyz="${m['base_link_xyz']}" rpy="0 0 0"/>
   </joint>
 
   <joint name="base_imu" type="fixed">
     <parent link="base_link"/>
     <child  link="imu_link"/>
-    <origin xyz="-0.05 0.0 0.05" rpy="0 0 0"/>
+    <origin xyz="${m['imu_xyz']}" rpy="0 0 0"/>
   </joint>
 
   <!-- Rear wheels (continuous — drive wheels) -->
   <joint name="back_right_joint" type="continuous">
-    <origin xyz="-0.11607 -0.08425 0.0125" rpy="0 0 0"/>
+    <origin xyz="${m['rear_right_xyz']}" rpy="0 0 0"/>
     <parent link="base_link"/>
     <child  link="back_right_link"/>
     <axis xyz="0 1 0"/>
@@ -336,7 +339,7 @@
   </joint>
 
   <joint name="back_left_joint" type="continuous">
-    <origin xyz="-0.11607 0.08425 0.0125" rpy="0 0 0"/>
+    <origin xyz="${m['rear_left_xyz']}" rpy="0 0 0"/>
     <parent link="base_link"/>
     <child  link="back_left_link"/>
     <axis xyz="0 1 0"/>
@@ -354,7 +357,7 @@
        on the robot (bag obst_fix13_curvt20): steering rate 99th pct 3.06
        rad/s, peak 4.06. 4.0 leaves headroom without being make-believe. -->
   <joint name="front_left_steer_joint" type="revolute">
-    <origin xyz="0.11922 0.065 0.0262" rpy="0 0 0"/>
+    <origin xyz="${m['steer_left_xyz']}" rpy="0 0 0"/>
     <parent link="base_link"/>
     <child  link="front_left_steer"/>
     <axis xyz="0 0 1"/>
@@ -363,7 +366,7 @@
   </joint>
 
   <joint name="front_right_steer_joint" type="revolute">
-    <origin xyz="0.11922 -0.065 0.0242" rpy="0 0 0"/>
+    <origin xyz="${m['steer_right_xyz']}" rpy="0 0 0"/>
     <parent link="base_link"/>
     <child  link="front_right_steer"/>
     <axis xyz="0 0 1"/>
@@ -373,7 +376,7 @@
 
   <!-- Front wheels (passive — follow steer knuckle) -->
   <joint name="front_left_wheel_joint" type="continuous">
-    <origin xyz="0.00022897 0.0228 -0.0137" rpy="0 0 -0.010042"/>   <!-- EXPERIMENT: front wheels coplanar with the rears -->
+    <origin xyz="${m['front_left_wheel']['xyz']}" rpy="${m['front_left_wheel']['rpy']}"/>   <!-- EXPERIMENT: front wheels coplanar with the rears -->
     <parent link="front_left_steer"/>
     <child  link="front_left_wheel"/>
     <!-- +y like every other wheel. This was -y, so the joint reported the
@@ -398,7 +401,7 @@
   </joint>
 
   <joint name="front_right_wheel_joint" type="continuous">
-    <origin xyz="-0.00025662 -0.019549 -0.0117" rpy="0 0 -0.013126"/>   <!-- EXPERIMENT -->
+    <origin xyz="${m['front_right_wheel']['xyz']}" rpy="${m['front_right_wheel']['rpy']}"/>   <!-- EXPERIMENT -->
     <parent link="front_right_steer"/>
     <child  link="front_right_wheel"/>
     <axis xyz="0 1 0"/>
@@ -407,18 +410,13 @@
 
   <!-- Sensors (fixed) -->
   <joint name="laser_joint" type="fixed">
-    <xacro:if value="${lidar_model == 'ld19'}">
-      <origin xyz="0.042548 0.005 0.127" rpy="0 0 0.0523605"/>
-    </xacro:if>
-    <xacro:unless value="${lidar_model == 'ld19'}">
-      <origin xyz="0.012548 0 0.127" rpy="0 0 0"/>
-    </xacro:unless>
+    <origin xyz="${lidar_mount['xyz']}" rpy="${lidar_mount['rpy']}"/>
     <parent link="base_link"/>
     <child  link="laser_link"/>
   </joint>
 
   <joint name="ld07_joint" type="fixed">
-    <origin xyz="0.172 0 0.034" rpy="0 ${ld07_tilt_rad} 0"/>
+    <origin xyz="${m['ld07_xyz']}" rpy="0 ${ld07_tilt_rad} 0"/>
     <parent link="base_link"/>
     <child  link="ld07_link"/>
   </joint>
@@ -426,7 +424,7 @@
   <!-- SEN0628 matrix ToF sensor — same mount position as LD07, no tilt -->
   <link name="sen0628_link"/>
   <joint name="sen0628_joint" type="fixed">
-    <origin xyz="0.172 0 0.054" rpy="0 0 0"/>
+    <origin xyz="${m['sen0628_xyz']}" rpy="0 0 0"/>
     <parent link="base_link"/>
     <child  link="sen0628_link"/>
   </joint>
@@ -467,7 +465,7 @@
   </link>
 
   <joint name="pan_joint" type="revolute">
-    <origin xyz="0.14 0 0.065" rpy="0 0 0"/>
+    <origin xyz="${m['pan_xyz']}" rpy="0 0 0"/>
     <parent link="base_link"/>
     <child  link="pan_link"/>
     <axis xyz="0 0 1"/>

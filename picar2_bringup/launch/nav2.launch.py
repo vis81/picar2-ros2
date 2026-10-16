@@ -40,6 +40,11 @@ def generate_launch_description():
     # makes a config variant a ~10-line overlay instead of a forked 234-line
     # file that silently drifts. Defaults to an empty overlay = no change.
     params_overlay = LaunchConfiguration('params_overlay')
+    # The chassis's footprint, turning radius and inflation radius, layered
+    # between nav2.yaml and the optional experiment overlay.
+    model_overlay = [str(bringup_share / 'config' / 'models') + '/',
+                     LaunchConfiguration('robot_model'), '/nav2.yaml']
+    nav2_params = [nav2_yaml, model_overlay, params_overlay]
 
     # Assumes bringup + cartographer are already running.
     # Nav2 subscribes to /map (from cartographer), /odom and TF (from EKF),
@@ -56,6 +61,8 @@ def generate_launch_description():
 
     return LaunchDescription([
         DeclareLaunchArgument('use_sim_time', default_value='false'),
+        DeclareLaunchArgument('robot_model', default_value='v1',
+                              description='Which chassis: v1 | v2 (see picar2.launch.py)'),
         DeclareLaunchArgument('nav_to_pose_bt', default_value=default_to_pose_bt),
         DeclareLaunchArgument('nav_through_poses_bt',
                               default_value=default_through_poses_bt),
@@ -68,25 +75,25 @@ def generate_launch_description():
             package='nav2_controller',
             executable='controller_server',
             output='screen',
-            parameters=[nav2_yaml, params_overlay, {'use_sim_time': use_sim_time}],
+            parameters=[*nav2_params, {'use_sim_time': use_sim_time}],
         ),
         Node(
             package='nav2_planner',
             executable='planner_server',
             output='screen',
-            parameters=[nav2_yaml, params_overlay, {'use_sim_time': use_sim_time}],
+            parameters=[*nav2_params, {'use_sim_time': use_sim_time}],
         ),
         Node(
             package='nav2_behaviors',
             executable='behavior_server',
             output='screen',
-            parameters=[nav2_yaml, params_overlay, {'use_sim_time': use_sim_time}],
+            parameters=[*nav2_params, {'use_sim_time': use_sim_time}],
         ),
         Node(
             package='nav2_bt_navigator',
             executable='bt_navigator',
             output='screen',
-            parameters=[nav2_yaml, params_overlay, {
+            parameters=[*nav2_params, {
                 'use_sim_time': use_sim_time,
                 'default_nav_through_poses_bt_xml':
                     LaunchConfiguration('nav_through_poses_bt'),

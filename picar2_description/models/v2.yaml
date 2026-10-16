@@ -1,0 +1,60 @@
+# Chassis v2 - the shorter 2026-10 chassis (Pi 5). Everything the URDF varies
+# between chassis; picar2.urdf.xacro reads this through robot_model:=v2.
+# Origins are "x y z" strings in the parent link's frame, metres.
+#
+# The ackermann controller and the costmaps carry their own copies of the
+# wheelbase / track / footprint in picar2_bringup/config/models/v2/ - keep
+# the two in step when re-measuring.
+#
+# TODO: every value below is a copy of v1 - the chassis is assembled but not
+# yet measured. Re-measure the axle positions, wheel radius, steering LUT and
+# sensor mounts before trusting odometry or the costmap footprint.
+
+# base_footprint sits on the ground under the rear axle.
+base_link_xyz: "0.11607 0 0.0215"
+chassis_collision:
+  xyz: "0 0 0.04"
+  size: "0.24 0.17 0.08"
+
+# Axles, relative to base_link. wheelbase = 0.11922 + 0.11607 = 0.235.
+rear_left_xyz:   "-0.11607  0.08425 0.0125"
+rear_right_xyz:  "-0.11607 -0.08425 0.0125"
+steer_left_xyz:  "0.11922  0.065 0.0262"
+steer_right_xyz: "0.11922 -0.065 0.0242"
+# Front wheels relative to their steer knuckle.
+front_left_wheel:  {xyz: "0.00022897 0.0228 -0.0137",     rpy: "0 0 -0.010042"}
+front_right_wheel: {xyz: "-0.00025662 -0.019549 -0.0117", rpy: "0 0 -0.013126"}
+wheel_radius: 0.033
+wheel_width: 0.025
+
+# Steering LUT: servo delta_us from centre (ascending) and steer angle in the
+# ROS convention (positive = left turn, so a positive measured degree is
+# negated here). Measured 2026-05-22 from a wheel-angle photo; refine with
+# the odom_cal circle test.
+# Steering servo centre, 1475 us. Lives on the STM32 (NVS key servo/center_0,
+# set with the shell's `servo center 0 1475`; 2026-10-16, horn re-indexed at
+# 1480 and the tie rod shortened so the servo's 885-2025 us range sits nearly
+# symmetric about straight-ahead). Nothing in ROS reads it - the LUT below is
+# deltas from it - so this line is the record of what the board holds.
+steer_servo_center_us: 1475
+# Usable steering envelope found by hand 2026-10-16: 950 us (left, linkage
+# binds below) to 2100 us (right, mechanical stop; the firmware clamp was
+# raised from 2025 to 2100 for it). -525 / +625 us about the centre - not
+# symmetric, it is the chassis. Also stored on the board as soft limits
+# (`servo limits 0 950 2100`, NVS keys servo/min_0 and servo/max_0), which
+# clamp every write including RC fallback. The LUT below ends at them.
+steer_servo_min_us: 950
+steer_servo_max_us: 2100
+steer_lut_us:  [-595, -454, -410, -364, -329, -299, -271, -252, -202, -151, -121, -101,
+                128, 154, 193, 257, 308, 354, 433, 464, 493, 545]
+steer_lut_rad: [0.6756, 0.5308, 0.4578, 0.4058, 0.3513, 0.3176, 0.2790, 0.2443, 0.1994, 0.1392, 0.1062, 0.0668,
+                -0.1276, -0.1646, -0.2049, -0.2829, -0.3129, -0.3681, -0.4680, -0.4844, -0.5078, -0.6109]
+
+# Sensor mounts, relative to base_link.
+imu_xyz: "-0.05 0 0.05"
+lidar_mount:
+  ld19:    {xyz: "0.042548 0.005 0.127", rpy: "0 0 0.0523605"}
+  default: {xyz: "0.012548 0 0.127",     rpy: "0 0 0"}
+ld07_xyz:    "0.172 0 0.034"
+sen0628_xyz: "0.172 0 0.054"
+pan_xyz:     "0.14 0 0.065"

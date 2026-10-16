@@ -1,0 +1,13 @@
+# Chassis v2 geometry for ros2_control, layered over config/controllers.yaml.
+# Same numbers as the URDF (picar2_description/models/v2.yaml).
+# TODO: copied from v1, not yet measured on the v2 chassis.
+ackermann_steering_controller:
+  ros__parameters:
+    wheelbase:             0.235    # 0.11922 + 0.11607
+    traction_track_width:  0.1685   # 2 × 0.08425
+    steering_track_width:  0.173    # left wheel centre 0.0878 + right 0.0845
+    traction_wheels_radius: 0.033   # TODO: calibrate with measured travel distance
+
+cmd_vel_relay:
+  ros__parameters:
+    max_angular_vel: 1.2    # rad/s — hardware max at 0.4 m/s: v/r = 0.4/0.34 ≈ 1.18

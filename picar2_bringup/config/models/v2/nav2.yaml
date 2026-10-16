@@ -1,0 +1,23 @@
+# Chassis v2 values for Nav2, layered over config/nav2.yaml (later wins at the
+# leaf). Only what follows the chassis dimensions lives here; the reasoning
+# behind each value stays with the commented-out line in nav2.yaml.
+# TODO: copied from v1, not yet measured on the v2 chassis.
+planner_server:
+  ros__parameters:
+    GridBased:
+      minimum_turning_radius: 0.5   # measured on hardware; theoretical min is ~0.34 m
+
+local_costmap:
+  local_costmap:
+    ros__parameters:
+      # base_footprint is at the rear axle; chassis extends ~40 mm behind it
+      footprint: "[[-0.04, -0.095], [-0.04, 0.095], [0.30, 0.095], [0.30, -0.095]]"
+      inflation_layer:
+        inflation_radius: 0.33      # not below the circumscribed radius (0.3273)
+
+global_costmap:
+  global_costmap:
+    ros__parameters:
+      footprint: "[[-0.04, -0.095], [-0.04, 0.095], [0.30, 0.095], [0.30, -0.095]]"
+      inflation_layer:
+        inflation_radius: 0.33

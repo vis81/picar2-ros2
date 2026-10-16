@@ -32,6 +32,10 @@ def generate_launch_description():
     # contact resolution right where a benchmark run starts its clock.
     spawn_z_arg = DeclareLaunchArgument('spawn_z', default_value='0.05',
                                         description='Robot spawn Z height')
+    robot_model_arg = DeclareLaunchArgument(
+        'robot_model', default_value='v1',
+        description='Which chassis: v1 | v2 (see picar2.launch.py)')
+    model_dir = [str(bringup_share / 'config' / 'models') + '/', LaunchConfiguration('robot_model')]
     lidar_arg = DeclareLaunchArgument('lidar', default_value='ld19',
                                       description='Lidar model: ld19 | lds02rr | none')
     use_mag_arg = DeclareLaunchArgument('use_mag', default_value='false',
@@ -48,6 +52,7 @@ def generate_launch_description():
             'xacro ', str(desc_share / 'urdf' / 'picar2.urdf.xacro'),
             ' use_sim:=true',
             ' lidar:=', LaunchConfiguration('lidar'),
+            ' robot_model:=', LaunchConfiguration('robot_model'),
             ' sensor_noise:=', LaunchConfiguration('sensor_noise'),
         ]),
         value_type=str)
@@ -154,7 +159,7 @@ def generate_launch_description():
     )
 
     # ── Magnetometer bias calibration pipeline ───────────────────────────────
-    mag_calib_file = str(bringup_share / 'config' / 'magnetometer_calib.yaml')
+    mag_calib_file = model_dir + ['/magnetometer_calib.yaml']
 
     mag_bias_observer = Node(
         package='magnetometer_pipeline',
@@ -181,6 +186,7 @@ def generate_launch_description():
     )
 
     return LaunchDescription([
+        robot_model_arg,
         world_arg,
         gz_resources,
         spawn_x_arg,

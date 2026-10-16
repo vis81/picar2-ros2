@@ -1,0 +1,4 @@
+# TODO: copied from v1 - recalibrate on the v2 robot (make imu-calib / make mag-calib ROBOT_MODEL=v2).
+magnetometer_bias_x: 3.81e-05
+magnetometer_bias_y: -0.00018779999999999998
+magnetometer_bias_z: 0.0001917
