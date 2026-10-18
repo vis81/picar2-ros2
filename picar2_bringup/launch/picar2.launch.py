@@ -31,7 +31,7 @@ def generate_launch_description():
     baud_arg  = DeclareLaunchArgument('baud',  default_value='460800')
     lidar_arg = DeclareLaunchArgument(
         'lidar', default_value='lds02rr',
-        description='LiDAR model: lds02rr | ld19 | none')
+        description='LiDAR model: lds02rr | ld19 | c1 | none')
     use_mag_arg = DeclareLaunchArgument('use_mag', default_value='false',
                                         description='Enable magnetometer fusion in Madgwick filter')
     use_ld07_arg = DeclareLaunchArgument('use_ld07', default_value='false',
@@ -249,6 +249,29 @@ def generate_launch_description():
         }],
     )
 
+    # ── LiDAR: c1 (Slamtec RPLIDAR C1, v2) ──────────────────────────────────
+    # Slamtec's sllidar_ros2 (SDK 2.1.0; the apt rplidar_ros is SDK 1.12 and
+    # cannot start a C1 scan). Stamps the scan at its start with a correct
+    # time_increment, so no deskew stage. angle_compensate fixes the bin
+    # count at 720 (0.5 deg) for Standard mode, 10 Hz, 0.05-16 m.
+    lidar_c1 = Node(
+        package='sllidar_ros2',
+        executable='sllidar_node',
+        name='lidar_node',
+        output='screen',
+        condition=lidar_is('c1'),
+        parameters=[{
+            'channel_type':     'serial',
+            'serial_port':      '/dev/rplidar',
+            'serial_baudrate':  460800,
+            'frame_id':         'laser_link',
+            'inverted':         False,
+            'angle_compensate': True,
+            'scan_mode':        'Standard',
+        }],
+        remappings=[('/scan', '/lidar_node/scan')],
+    )
+
     # CPU load on /diagnostics: total, per core, temperature, throttling
     # and the top processes, once a second. Recorded into every bag.
     cpu_monitor = Node(
@@ -447,6 +470,7 @@ def generate_launch_description():
         sen0628_activate,
         lidar_ld19_lc_mgr,
         lidar_ld19_deskew,
+        lidar_c1,
         cpu_monitor,
         sen0628_node,
         ld07_node,

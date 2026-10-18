@@ -54,6 +54,7 @@ steer_lut_rad: [0.6756, 0.5308, 0.4578, 0.4058, 0.3513, 0.3176, 0.2790, 0.2443, 
 imu_xyz: "-0.05 0 0.05"
 lidar_mount:
   ld19:    {xyz: "0.042548 0.005 0.127", rpy: "0 0 0.0523605"}
+  c1:      {xyz: "0.012548 0 0.127",     rpy: "0 0 3.14159265"}   # mounted facing backwards; TODO measure xyz on v2
   default: {xyz: "0.012548 0 0.127",     rpy: "0 0 0"}
 ld07_xyz:    "0.172 0 0.034"
 sen0628_xyz: "0.172 0 0.054"
