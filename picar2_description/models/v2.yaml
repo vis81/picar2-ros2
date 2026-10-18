@@ -6,31 +6,33 @@
 # wheelbase / track / footprint in picar2_bringup/config/models/v2/ - keep
 # the two in step when re-measuring.
 #
-# TODO: every value below is a copy of v1 - the chassis is assembled but not
-# yet measured. Re-measure the axle positions, wheel radius, steering LUT and
-# sensor mounts before trusting odometry or the costmap footprint.
+# Measured on the assembled v2 chassis 2026-10-18 (tape, car on the floor):
+# wheelbase 142 mm, tracks 165/165, wheels d 67 x 26, body -34..+237 mm from
+# the rear axle, 190 wide, 155 tall. Still to do: steering LUT and the
+# full-lock turning radius (the LUT below is v1's), camera mount.
 
 # base_footprint sits on the ground under the rear axle.
-base_link_xyz: "0.11607 0 0.0215"
+base_link_xyz: "0.071 0 0.0215"   # mid-wheelbase, 21.5 mm up
 chassis_collision:
-  xyz: "0 0 0.04"
-  size: "0.24 0.17 0.08"
+  xyz: "0.0305 0 0.056"    # body -34..+237 mm from the rear axle, 155 mm tall
+  size: "0.271 0.19 0.155"
 
-# Axles, relative to base_link. wheelbase = 0.11922 + 0.11607 = 0.235.
-rear_left_xyz:   "-0.11607  0.08425 0.0125"
-rear_right_xyz:  "-0.11607 -0.08425 0.0125"
-steer_left_xyz:  "0.11922  0.065 0.0262"
-steer_right_xyz: "0.11922 -0.065 0.0242"
-# Front wheels relative to their steer knuckle.
-front_left_wheel:  {xyz: "0.00022897 0.0228 -0.0137",     rpy: "0 0 -0.010042"}
-front_right_wheel: {xyz: "-0.00025662 -0.019549 -0.0117", rpy: "0 0 -0.013126"}
-wheel_radius: 0.033
-wheel_width: 0.025
+# Axles, relative to base_link. wheelbase = 0.071 + 0.071 = 0.142; wheel
+# centres 33.5 mm above the floor (= radius), tracks 0.165 front and rear.
+rear_left_xyz:   "-0.071  0.0825 0.012"
+rear_right_xyz:  "-0.071 -0.0825 0.012"
+steer_left_xyz:  "0.071  0.065 0.025"
+steer_right_xyz: "0.071 -0.065 0.025"
+# Front wheels relative to their steer knuckle (no toe correction measured).
+front_left_wheel:  {xyz: "0  0.0175 -0.013", rpy: "0 0 0"}
+front_right_wheel: {xyz: "0 -0.0175 -0.013", rpy: "0 0 0"}
+wheel_radius: 0.0335
+wheel_width: 0.026
 
 # Steering LUT: servo delta_us from centre (ascending) and steer angle in the
 # ROS convention (positive = left turn, so a positive measured degree is
-# negated here). Measured 2026-05-22 from a wheel-angle photo; refine with
-# the odom_cal circle test.
+# negated here). TODO v2: still v1's table (measured 2026-05-22 on v1 from a
+# wheel-angle photo) - re-measure on this linkage, then the odom_cal circle.
 # Steering servo centre, 1475 us. Lives on the STM32 (NVS key servo/center_0,
 # set with the shell's `servo center 0 1475`; 2026-10-16, horn re-indexed at
 # 1480 and the tie rod shortened so the servo's 885-2025 us range sits nearly
@@ -50,13 +52,16 @@ steer_lut_us:  [-595, -454, -410, -364, -329, -299, -271, -252, -202, -151, -121
 steer_lut_rad: [0.6756, 0.5308, 0.4578, 0.4058, 0.3513, 0.3176, 0.2790, 0.2443, 0.1994, 0.1392, 0.1062, 0.0668,
                 -0.1276, -0.1646, -0.2049, -0.2829, -0.3129, -0.3681, -0.4680, -0.4844, -0.5078, -0.6109]
 
-# Sensor mounts, relative to base_link.
-imu_xyz: "-0.05 0 0.05"
-imu_rpy: "0 0 3.14159265"   # ICM-20948 sits turned 180 deg about Z vs the v1 chip (6-position calib gave -1 X/Y scale)
+# Sensor mounts, relative to base_link (= floor positions minus base_link_xyz).
+# ICM-20948 on the MCU board: over the front axle, 20 mm right, 85 mm up;
+# turned 180 deg about Z vs the v1 chip (6-position calib gave -1 X/Y scale).
+imu_xyz: "0.071 -0.020 0.0635"
+imu_rpy: "0 0 3.14159265"
 lidar_mount:
-  ld19:    {xyz: "0.042548 0.005 0.127", rpy: "0 0 0.0523605"}
-  c1:      {xyz: "0.012548 0 0.127",     rpy: "0 0 3.14159265"}   # mounted facing backwards; TODO measure xyz on v2
-  default: {xyz: "0.012548 0 0.127",     rpy: "0 0 0"}
-ld07_xyz:    "0.172 0 0.034"
-sen0628_xyz: "0.172 0 0.054"
-pan_xyz:     "0.14 0 0.065"
+  # RPLIDAR C1: axis 60 mm ahead of the rear axle, centred, laser window
+  # 140 mm up, mounted facing backwards.
+  c1:      {xyz: "-0.011 0 0.1185", rpy: "0 0 3.14159265"}
+  default: {xyz: "-0.011 0 0.1185", rpy: "0 0 3.14159265"}
+ld07_xyz:    "0.172 0 0.034"        # not fitted on v2
+sen0628_xyz: "0.103 0 0.0535"       # face 174 mm ahead of the rear axle, 75 mm up, level
+pan_xyz:     "0.14 0 0.065"         # TODO: no camera on v2 yet
