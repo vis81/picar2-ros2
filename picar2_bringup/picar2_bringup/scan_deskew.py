@@ -46,6 +46,10 @@ class ScanDeskew(Node):
         # True: beam j measured at stamp - j*dt (driver rot_verse CCW).
         # False: beam j measured at stamp - (n-1-j)*dt.
         self.declare_parameter('reverse_beam_time', True)
+        # True: the driver stamps the start of the revolution (sllidar_ros2 /
+        # RPLIDAR C1): the end is stamp + (n-1)*dt and the beam timing above
+        # counts back from there. False: the stamp is the end (LD19).
+        self.declare_parameter('stamp_at_start', False)
         # Beams newer than the newest transform are extrapolated; beyond
         # this the transform is simply stale (EKF hiccup) - pass through.
         self.declare_parameter('max_lead', 0.15)
@@ -53,6 +57,7 @@ class ScanDeskew(Node):
         self.fixed = self.get_parameter('fixed_frame').value
         self.segments = int(self.get_parameter('segments').value)
         self.reverse = bool(self.get_parameter('reverse_beam_time').value)
+        self.stamp_at_start = bool(self.get_parameter('stamp_at_start').value)
         self.max_lead = float(self.get_parameter('max_lead').value)
 
         self.buf = Buffer(cache_time=Duration(seconds=5.0))
@@ -91,6 +96,8 @@ class ScanDeskew(Node):
             return
         dt = msg.time_increment
         t_end = Time.from_msg(msg.header.stamp)
+        if self.stamp_at_start:
+            t_end = t_end + Duration(seconds=dt * (n - 1))
         frame = msg.header.frame_id.lstrip('/')
         try:
             # The scan is stamped "now" by the driver while the EKF's

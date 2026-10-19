@@ -79,6 +79,10 @@ public:
     segments_ = declare_parameter<int>("segments", 16);
     // true: beam j measured at stamp - j*dt (driver rot_verse CCW).
     reverse_ = declare_parameter<bool>("reverse_beam_time", true);
+    // true: the driver stamps the start of the revolution (sllidar_ros2 /
+    // RPLIDAR C1), so the end is stamp + (n-1)*dt and the beam timing above
+    // counts back from there. false: the stamp is the end (LD19).
+    stamp_at_start_ = declare_parameter<bool>("stamp_at_start", false);
     // Beams newer than the newest transform are extrapolated; beyond this
     // the transform is simply stale (EKF hiccup) - pass through.
     max_lead_ = declare_parameter<double>("max_lead", 0.15);
@@ -118,7 +122,10 @@ private:
       pub_->publish(std::move(msg));
       return;
     }
-    const rclcpp::Time t_end(msg->header.stamp, RCL_ROS_TIME);
+    rclcpp::Time t_end(msg->header.stamp, RCL_ROS_TIME);
+    if (stamp_at_start_) {
+      t_end = t_end + rclcpp::Duration::from_seconds(dt * static_cast<double>(n - 1));
+    }
     std::string frame = msg->header.frame_id;
     if (!frame.empty() && frame[0] == '/') {frame.erase(0, 1);}
 
@@ -212,6 +219,7 @@ private:
   std::string fixed_;
   int segments_{16};
   bool reverse_{true};
+  bool stamp_at_start_{false};
   double max_lead_{0.15};
   int n_pass_{0}, n_ok_{0};
   std::unique_ptr<tf2_ros::Buffer> buffer_;

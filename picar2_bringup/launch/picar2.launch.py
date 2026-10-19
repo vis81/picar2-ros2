@@ -251,9 +251,16 @@ def generate_launch_description():
 
     # ── LiDAR: c1 (Slamtec RPLIDAR C1, v2) ──────────────────────────────────
     # Slamtec's sllidar_ros2 (SDK 2.1.0; the apt rplidar_ros is SDK 1.12 and
-    # cannot start a C1 scan). Stamps the scan at its start with a correct
-    # time_increment, so no deskew stage. angle_compensate fixes the bin
-    # count at 720 (0.5 deg) for Standard mode, 10 Hz, 0.05-16 m.
+    # cannot start a C1 scan). angle_compensate fixes the bin count at 720
+    # (0.5 deg) for Standard mode, 10 Hz, 0.05-16 m. The raw scan goes to
+    # scan_deskew like the LD19's: the driver stamps the START of the
+    # revolution and AMCL/costmaps take the scan as instantaneous, so at
+    # 1 m/s the last beams would sit 10 cm (7 deg at full steer) from where
+    # they were measured (offline on the 2026-10-19 1.0 m/s laps: map-hit
+    # fraction in fast turns 0.49 raw -> 0.60 deskewed). With angle_compensate
+    # the bins are in rotation (= time) order and reverse_data flips them, so
+    # ROS beam j was measured at (stamp + (n-1)*dt) - j*dt: reverse_beam_time
+    # with stamp_at_start.
     # Respawn: a restart reopens the C1 while it still streams from the
     # previous run and the SDK gives up with a timeout (80008004); the next
     # attempt a few seconds later succeeds.
@@ -274,7 +281,23 @@ def generate_launch_description():
             'angle_compensate': True,
             'scan_mode':        'Standard',
         }],
-        remappings=[('/scan', '/lidar_node/scan')],
+        remappings=[('/scan', '/lidar_node/scan_raw')],
+    )
+
+    lidar_c1_deskew = Node(
+        package='picar2_bringup',
+        executable='scan_deskew',
+        name='scan_deskew',
+        output='screen',
+        condition=lidar_is('c1'),
+        parameters=[{
+            'input': '/lidar_node/scan_raw',
+            'output': '/lidar_node/scan',
+            'fixed_frame': 'odom',
+            'reverse_beam_time': True,
+            'stamp_at_start': True,
+            'max_lead': 0.2,
+        }],
     )
 
     # CPU load on /diagnostics: total, per core, temperature, throttling
@@ -476,6 +499,7 @@ def generate_launch_description():
         lidar_ld19_lc_mgr,
         lidar_ld19_deskew,
         lidar_c1,
+        lidar_c1_deskew,
         cpu_monitor,
         sen0628_node,
         ld07_node,
