@@ -254,12 +254,17 @@ def generate_launch_description():
     # cannot start a C1 scan). Stamps the scan at its start with a correct
     # time_increment, so no deskew stage. angle_compensate fixes the bin
     # count at 720 (0.5 deg) for Standard mode, 10 Hz, 0.05-16 m.
+    # Respawn: a restart reopens the C1 while it still streams from the
+    # previous run and the SDK gives up with a timeout (80008004); the next
+    # attempt a few seconds later succeeds.
     lidar_c1 = Node(
         package='sllidar_ros2',
         executable='sllidar_node',
         name='lidar_node',
         output='screen',
         condition=lidar_is('c1'),
+        respawn=True,
+        respawn_delay=3.0,
         parameters=[{
             'channel_type':     'serial',
             'serial_port':      '/dev/rplidar',
