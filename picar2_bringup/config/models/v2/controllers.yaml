@@ -6,8 +6,8 @@ ackermann_steering_controller:
     wheelbase:             0.142
     traction_track_width:  0.165
     steering_track_width:  0.165
-    traction_wheels_radius: 0.0335  # 67 mm wheels; TODO: calibrate with measured travel distance
+    traction_wheels_radius: 0.0331  # 67 mm wheels; calibrated 2026-10-18: 1.943 m taped vs 1.966 m at 0.0335
 
 cmd_vel_relay:
   ros__parameters:
-    max_angular_vel: 1.2    # rad/s; TODO: v/r once the full-lock radius is measured (a quick arc gave ~0.27 m)
+    max_angular_vel: 1.25   # rad/s: 0.4 m/s over the right-lock radius 0.31 m (left lock is 0.23 m)

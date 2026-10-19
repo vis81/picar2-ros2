@@ -1,11 +1,11 @@
 # Chassis v2 values for Nav2, layered over config/nav2.yaml (later wins at the
 # leaf). Only what follows the chassis dimensions lives here; the reasoning
 # behind each value stays with the commented-out line in nav2.yaml.
-# Measured on the assembled v2 chassis 2026-10-18; turning radius still to measure.
+# Measured on the assembled v2 chassis 2026-10-18 (geometry by tape, turning radius by the gyro steering sweep).
 planner_server:
   ros__parameters:
     GridBased:
-      minimum_turning_radius: 0.30  # TODO measure full-lock circles; a quick arc gave ~0.27 m, theoretical ~0.20
+      minimum_turning_radius: 0.35  # right lock measures 0.31 m (left 0.23) - the planner must fit the worse side
 
 local_costmap:
   local_costmap:
